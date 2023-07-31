@@ -1,11 +1,45 @@
 # libSQL API for Python
 
+[![PyPI](https://badge.fury.io/py/libsql-experimental.svg)](https://badge.fury.io/py/libsql-experimental)
+
+libSQL is an open source, open contribution fork of SQLite. We aim to evolve it to suit many more use cases than SQLite was originally designed for.
+
+This source repository contains libSQL API bindings for Python, which aim to be compatible with the [sqlite3](https://docs.python.org/3/library/sqlite3.html) module.
+
+## Install
+
+You can install the current release _(MacOS and Linux)_:
+
+```
+$ pip install libsql-experimental
+```
+
 ## Getting Started
+
+To try out your first libsql program, start the Python interpreter:
+
+```shell
+$ python
+```
+
+and then:
+
+```python
+>>> import libsql_experimental as libsql
+>>> con = libsql.connect("hello.db")
+>>> cur = con.cursor()
+>>> cur.execute("CREATE TABLE users (id INTEGER, email TEXT);")
+<builtins.Result object at 0x102dcf8d0>
+>>> cur.execute("INSERT INTO users VALUES (1, 'alice@example.org')")
+<builtins.Result object at 0x102dcf4b0>
+>>> cur.execute("SELECT * FROM users").fetchone()
+(1, 'alice@example.org')
+```
 
 #### Connecting to a database
 
 ```python
-import libsql
+import libsql_experimental as libsql
 
 con = libsql.connect("hello.db")
 cur = con.cursor()
@@ -62,3 +96,15 @@ Run the SQLite benchmarks for comparison:
 ```sh
 python3 perf-sqlite3.py
 ```
+
+## License
+
+This project is licensed under the [MIT license].
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in libSQL by you, shall be licensed as MIT, without any additional
+terms or conditions.
+
+[MIT license]: https://github.com/libsql/libsql-experimental-python/blob/main/LICENSE.md
