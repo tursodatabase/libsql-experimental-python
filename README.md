@@ -45,6 +45,15 @@ con = libsql.connect("hello.db")
 cur = con.cursor()
 ```
 
+#### Embedded replica
+
+```python
+import libsql_experimental as libsql
+
+con = libsql.connect("hello.db", sync_url="<url>")
+con.sync()
+```
+
 #### Creating a table
 
 ```python

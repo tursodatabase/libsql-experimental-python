@@ -9,14 +9,23 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
 }
 
 #[pyfunction]
-fn connect(url: String) -> PyResult<Connection> {
-    let db = libsql_core::Database::open(url).map_err(to_py_err)?;
-    Ok(Connection { db })
+#[pyo3(signature = (database, sync_url=None))]
+fn connect(database: String, sync_url: Option<String>) -> PyResult<Connection> {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let db = match sync_url {
+        Some(sync_url) => {
+            let opts = libsql_core::Opts::with_http_sync(sync_url);
+            rt.block_on(libsql_core::Database::open_with_opts(database, opts)).map_err(to_py_err)?
+        },
+        None => libsql_core::Database::open(database).map_err(to_py_err)?,
+    };
+    Ok(Connection { db, rt })
 }
 
 #[pyclass]
 pub struct Connection {
     db: libsql_core::Database,
+    rt: tokio::runtime::Runtime,
 }
 
 #[pymethods]
@@ -24,6 +33,11 @@ impl Connection {
     fn cursor(self_: PyRef<'_, Self>) -> PyResult<Cursor> {
         let conn = self_.db.connect().map_err(to_py_err)?;
         Ok(Cursor { conn })
+    }
+
+    fn sync(self_: PyRef<'_, Self>) -> PyResult<()> {
+        self_.rt.block_on(self_.db.sync()).map_err(to_py_err)?;
+        Ok(())
     }
 }
 
