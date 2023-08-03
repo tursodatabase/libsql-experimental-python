@@ -1,6 +1,6 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyList, PyTuple};
 
 use ::libsql as libsql_core;
 
@@ -15,8 +15,9 @@ fn connect(database: String, sync_url: Option<String>) -> PyResult<Connection> {
     let db = match sync_url {
         Some(sync_url) => {
             let opts = libsql_core::Opts::with_http_sync(sync_url);
-            rt.block_on(libsql_core::Database::open_with_opts(database, opts)).map_err(to_py_err)?
-        },
+            rt.block_on(libsql_core::Database::open_with_opts(database, opts))
+                .map_err(to_py_err)?
+        }
         None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
     Ok(Connection { db, rt })
@@ -91,25 +92,8 @@ impl Result {
                 let row = rows.next().map_err(to_py_err)?;
                 match row {
                     Some(row) => {
-                        let mut elements: Vec<Py<PyAny>> = vec![];
-                        for col_idx in 0..rows.column_count() {
-                            let col_type = row.column_type(col_idx).map_err(to_py_err)?;
-                            let value = match col_type {
-                                libsql_core::ValueType::Integer => {
-                                    let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
-                                    value.into_py(self_.py())
-                                }
-                                libsql_core::ValueType::Real => todo!(),
-                                libsql_core::ValueType::Blob => todo!(),
-                                libsql_core::ValueType::Text => {
-                                    let value = row.get::<&str>(col_idx).map_err(to_py_err)?;
-                                    value.into_py(self_.py())
-                                }
-                                libsql_core::ValueType::Null => todo!(),
-                            };
-                            elements.push(value);
-                        }
-                        Ok(Some(PyTuple::new(self_.py(), elements)))
+                        let row = convert_row(self_.py(), row, rows.column_count())?;
+                        Ok(Some(row))
                     }
                     None => Ok(None),
                 }
@@ -117,6 +101,48 @@ impl Result {
             None => Ok(None),
         }
     }
+
+    fn fetchall(self_: PyRef<'_, Self>) -> PyResult<Option<&PyList>> {
+        match self_.rows {
+            Some(ref rows) => {
+                let mut elements: Vec<Py<PyAny>> = vec![];
+                loop {
+                    let row = rows.next().map_err(to_py_err)?;
+                    match row {
+                        Some(row) => {
+                            let row = convert_row(self_.py(), row, rows.column_count())?;
+                            elements.push(row.into());
+                        }
+                        None => break,
+                    }
+                }
+                Ok(Some(PyList::new(self_.py(), elements)))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> PyResult<&PyTuple> {
+    let mut elements: Vec<Py<PyAny>> = vec![];
+    for col_idx in 0..column_count {
+        let col_type = row.column_type(col_idx).map_err(to_py_err)?;
+        let value = match col_type {
+            libsql_core::ValueType::Integer => {
+                let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
+                value.into_py(py)
+            }
+            libsql_core::ValueType::Real => todo!(),
+            libsql_core::ValueType::Blob => todo!(),
+            libsql_core::ValueType::Text => {
+                let value = row.get::<&str>(col_idx).map_err(to_py_err)?;
+                value.into_py(py)
+            }
+            libsql_core::ValueType::Null => todo!(),
+        };
+        elements.push(value);
+    }
+    Ok(PyTuple::new(py, elements))
 }
 
 #[pymodule]
