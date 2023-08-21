@@ -10,8 +10,14 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, sync_url=None, sync_auth=""))]
-fn connect(database: String, sync_url: Option<String>, sync_auth: &str) -> PyResult<Connection> {
+#[pyo3(signature = (database, check_same_thread=true, uri=false, sync_url=None, sync_auth=""))]
+fn connect(
+    database: String,
+    check_same_thread: bool,
+    uri: bool,
+    sync_url: Option<String>,
+    sync_auth: &str,
+) -> PyResult<Connection> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
