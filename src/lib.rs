@@ -6,7 +6,11 @@ use pyo3::types::{PyList, PyTuple};
 use std::sync::Arc;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
-    PyValueError::new_err(format!("{}", error))
+    let msg = match error {
+        libsql::Error::PrepareFailed(_, _, err) => err,
+        _ => error.to_string(),
+    };
+    PyValueError::new_err(msg)
 }
 
 #[pyfunction]
