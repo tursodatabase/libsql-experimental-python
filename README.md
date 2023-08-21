@@ -50,7 +50,7 @@ cur = con.cursor()
 ```python
 import libsql_experimental as libsql
 
-con = libsql.connect("hello.db", sync_url="<url>")
+con = libsql.connect("hello.db", sync_url="<url>", sync_auth="<auth token>")
 con.sync()
 ```
 

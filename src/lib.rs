@@ -9,12 +9,12 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, sync_url=None))]
-fn connect(database: String, sync_url: Option<String>) -> PyResult<Connection> {
+#[pyo3(signature = (database, sync_url=None, sync_auth=""))]
+fn connect(database: String, sync_url: Option<String>, sync_auth: &str) -> PyResult<Connection> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
-            let opts = libsql_core::Opts::with_http_sync(sync_url);
+            let opts = libsql_core::Opts::with_http_sync(sync_url, sync_auth);
             rt.block_on(libsql_core::Database::open_with_opts(database, opts))
                 .map_err(to_py_err)?
         }
@@ -74,7 +74,7 @@ impl Cursor {
             }
             None => libsql_core::Params::None,
         };
-        let rows = self_.conn.execute(sql, params).map_err(to_py_err)?;
+        let rows = self_.conn.query(sql, params).map_err(to_py_err)?;
         Ok(Result { rows })
     }
 }
