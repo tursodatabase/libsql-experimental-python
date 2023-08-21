@@ -1,9 +1,9 @@
+use ::libsql as libsql_core;
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::sync::Arc;
-use ::libsql as libsql_core;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     PyValueError::new_err(format!("{}", error))
@@ -46,7 +46,10 @@ unsafe impl Send for Connection {}
 #[pymethods]
 impl Connection {
     fn cursor(self_: PyRef<'_, Self>) -> PyResult<Cursor> {
-        Ok(Cursor { conn: self_.conn.clone() })
+        Ok(Cursor {
+            conn: self_.conn.clone(),
+            rows: None,
+        })
     }
 
     fn sync(self_: PyRef<'_, Self>) -> PyResult<()> {
@@ -72,6 +75,7 @@ impl Connection {
 #[pyclass]
 pub struct Cursor {
     conn: Arc<libsql_core::Connection>,
+    rows: Option<libsql_core::Rows>,
 }
 
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
@@ -79,11 +83,11 @@ unsafe impl Send for Cursor {}
 
 #[pymethods]
 impl Cursor {
-    fn execute(
-        self_: PyRef<'_, Self>,
+    fn execute<'a>(
+        mut self_: PyRefMut<'a, Self>,
         sql: String,
         parameters: Option<&PyTuple>,
-    ) -> PyResult<Result> {
+    ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
         let params: libsql_core::Params = match parameters {
             Some(parameters) => {
                 let mut params = vec![];
@@ -104,18 +108,10 @@ impl Cursor {
             }
             None => libsql_core::Params::None,
         };
-        let rows = self_.conn.query(sql, params).map_err(to_py_err)?;
-        Ok(Result { rows })
+        self_.rows = self_.conn.query(sql, params).map_err(to_py_err)?;
+        Ok(self_)
     }
-}
 
-#[pyclass]
-pub struct Result {
-    rows: Option<libsql_core::Rows>,
-}
-
-#[pymethods]
-impl Result {
     fn fetchone(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
         match self_.rows {
             Some(ref rows) => {
@@ -185,6 +181,5 @@ fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(connect, m)?)?;
     m.add_class::<Connection>()?;
     m.add_class::<Cursor>()?;
-    m.add_class::<Result>()?;
     Ok(())
 }
