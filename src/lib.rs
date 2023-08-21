@@ -147,6 +147,7 @@ fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> Py
 
 #[pymodule]
 fn libsql_experimental(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add("paramstyle", "qmark")?;
     m.add_function(wrap_pyfunction!(connect, m)?)?;
     m.add_class::<Connection>()?;
     m.add_class::<Cursor>()?;
