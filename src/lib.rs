@@ -48,6 +48,7 @@ impl Connection {
     fn cursor(self_: PyRef<'_, Self>) -> PyResult<Cursor> {
         Ok(Cursor {
             conn: self_.conn.clone(),
+            stmt: None,
             rows: None,
         })
     }
@@ -75,6 +76,7 @@ impl Connection {
 #[pyclass]
 pub struct Cursor {
     conn: Arc<libsql_core::Connection>,
+    stmt: Option<libsql_core::Statement>,
     rows: Option<libsql_core::Rows>,
 }
 
@@ -108,8 +110,33 @@ impl Cursor {
             }
             None => libsql_core::Params::None,
         };
-        self_.rows = self_.conn.query(sql, params).map_err(to_py_err)?;
+        let stmt = self_.conn.prepare(sql).map_err(to_py_err)?;
+        let rows = stmt.query(&params).map_err(to_py_err)?;
+        self_.stmt = Some(stmt);
+        self_.rows = Some(rows);
         Ok(self_)
+    }
+
+    #[getter]
+    fn description(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
+        let stmt = self_.stmt.as_ref().unwrap();
+        let mut elements: Vec<Py<PyAny>> = vec![];
+        for column in stmt.columns() {
+            let name = column.name();
+            let element = (
+                name,
+                self_.py().None(),
+                self_.py().None(),
+                self_.py().None(),
+                self_.py().None(),
+                self_.py().None(),
+                self_.py().None(),
+            )
+                .to_object(self_.py());
+            elements.push(element);
+        }
+        let elements = PyTuple::new(self_.py(), elements);
+        Ok(Some(elements))
     }
 
     fn fetchone(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
