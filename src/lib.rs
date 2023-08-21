@@ -1,4 +1,5 @@
 use pyo3::exceptions::PyValueError;
+use pyo3::create_exception;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
@@ -145,10 +146,13 @@ fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> Py
     Ok(PyTuple::new(py, elements))
 }
 
+create_exception!(libsql_experimental, Error, pyo3::exceptions::PyException);
+
 #[pymodule]
-fn libsql_experimental(_py: Python, m: &PyModule) -> PyResult<()> {
+fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("paramstyle", "qmark")?;
     m.add("sqlite_version_info", (3, 42, 0))?;
+    m.add("Error", py.get_type::<Error>())?;
     m.add_function(wrap_pyfunction!(connect, m)?)?;
     m.add_class::<Connection>()?;
     m.add_class::<Cursor>()?;
