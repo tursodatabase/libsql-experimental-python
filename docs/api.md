@@ -188,7 +188,7 @@ Unimplemented.
 
 ### description
 
-Unimplemented.
+Column names of the query that was run last.
 
 ### lastrowid
 
