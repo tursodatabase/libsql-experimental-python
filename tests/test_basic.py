@@ -14,6 +14,19 @@ def test_basic(provider):
     assert (1, 'alice@example.com') == res.fetchone()
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_commit_and_rollback(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    conn.commit()
+    cur.execute("INSERT INTO users VALUES (1, 'alice@example.com')")
+    res = cur.execute("SELECT * FROM users")
+    assert (1, 'alice@example.com') == res.fetchone()
+    conn.rollback();
+    res = cur.execute("SELECT * FROM users")
+    assert res.fetchone() is None
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_params(provider):
     conn = connect(provider, ":memory:")
     cur = conn.cursor()

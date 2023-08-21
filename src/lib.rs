@@ -1,8 +1,8 @@
-use pyo3::exceptions::PyValueError;
 use pyo3::create_exception;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-
+use std::sync::Arc;
 use ::libsql as libsql_core;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
@@ -27,32 +27,55 @@ fn connect(
         }
         None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
-    Ok(Connection { db, rt })
+    let conn = Arc::new(db.connect().map_err(to_py_err)?);
+    // TODO: Switch to libSQL transaction API
+    conn.execute("BEGIN", ()).map_err(to_py_err)?;
+    Ok(Connection { db, conn, rt })
 }
 
 #[pyclass]
 pub struct Connection {
     db: libsql_core::Database,
+    conn: Arc<libsql_core::Connection>,
     rt: tokio::runtime::Runtime,
 }
+
+// SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
+unsafe impl Send for Connection {}
 
 #[pymethods]
 impl Connection {
     fn cursor(self_: PyRef<'_, Self>) -> PyResult<Cursor> {
-        let conn = self_.db.connect().map_err(to_py_err)?;
-        Ok(Cursor { conn })
+        Ok(Cursor { conn: self_.conn.clone() })
     }
 
     fn sync(self_: PyRef<'_, Self>) -> PyResult<()> {
         self_.rt.block_on(self_.db.sync()).map_err(to_py_err)?;
         Ok(())
     }
+
+    fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
+        // TODO: Switch to libSQL transaction API
+        self_.conn.execute("COMMIT", ()).map_err(to_py_err)?;
+        self_.conn.execute("BEGIN", ()).map_err(to_py_err)?;
+        Ok(())
+    }
+
+    fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
+        // TODO: Switch to libSQL transaction API
+        self_.conn.execute("ROLLBACK", ()).map_err(to_py_err)?;
+        self_.conn.execute("BEGIN", ()).map_err(to_py_err)?;
+        Ok(())
+    }
 }
 
 #[pyclass]
 pub struct Cursor {
-    conn: libsql_core::Connection,
+    conn: Arc<libsql_core::Connection>,
 }
+
+// SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
+unsafe impl Send for Cursor {}
 
 #[pymethods]
 impl Cursor {
