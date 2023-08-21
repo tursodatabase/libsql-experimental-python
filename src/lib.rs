@@ -147,6 +147,11 @@ impl Cursor {
             None => Ok(None),
         }
     }
+
+    fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
+        // TODO
+        Ok(())
+    }
 }
 
 fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> PyResult<&PyTuple> {
