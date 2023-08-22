@@ -148,7 +148,7 @@ Execute one SQL statement.
 
 ### executemany(sql, parameters)
 
-Execute a SQL statement multiple times for every item in `parameters` array.
+Unimplemented.
 
 ### executescript()
 
