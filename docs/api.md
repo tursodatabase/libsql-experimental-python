@@ -192,7 +192,7 @@ Column names of the query that was run last.
 
 ### lastrowid
 
-Unimplemented.
+Returns the row ID of the last inserted row.
 
 ### rowcount
 

@@ -167,6 +167,14 @@ impl Cursor {
         }
     }
 
+    #[getter]
+    fn lastrowid(self_: PyRef<'_, Self>) -> PyResult<Option<i64>> {
+        match self_.stmt {
+            Some(_) => Ok(Some(self_.conn.last_insert_rowid())),
+            None => Ok(None),
+        }
+    }
+
     fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO
         Ok(())
