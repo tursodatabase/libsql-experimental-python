@@ -14,9 +14,10 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, check_same_thread=true, uri=false, sync_url=None, sync_auth=""))]
+#[pyo3(signature = (database, isolation_level="DEFERRED", check_same_thread=true, uri=false, sync_url=None, sync_auth=""))]
 fn connect(
     database: String,
+    isolation_level: Option<&str>,
     check_same_thread: bool,
     uri: bool,
     sync_url: Option<String>,
@@ -31,8 +32,9 @@ fn connect(
         }
         None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
+    let autocommit = isolation_level.is_none();
     let conn = Arc::new(db.connect().map_err(to_py_err)?);
-    Ok(Connection { db, conn, rt })
+    Ok(Connection { db, conn, rt, autocommit })
 }
 
 #[pyclass]
@@ -40,6 +42,7 @@ pub struct Connection {
     db: libsql_core::Database,
     conn: Arc<libsql_core::Connection>,
     rt: tokio::runtime::Runtime,
+    autocommit: bool,
 }
 
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
@@ -52,6 +55,7 @@ impl Connection {
             conn: self_.conn.clone(),
             stmt: None,
             rows: None,
+            autocommit: self_.autocommit,
         })
     }
 
@@ -93,6 +97,7 @@ pub struct Cursor {
     conn: Arc<libsql_core::Connection>,
     stmt: Option<libsql_core::Statement>,
     rows: Option<libsql_core::Rows>,
+    autocommit: bool,
 }
 
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
@@ -187,7 +192,7 @@ fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
 }
 
 fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
-    if cursor.conn.is_autocommit() {
+    if !cursor.autocommit && cursor.conn.is_autocommit() {
         // TODO: Begin a transaction only for DML statements like Python module does.
         begin_transaction(&cursor.conn)?;
     }

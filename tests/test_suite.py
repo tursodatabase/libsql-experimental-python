@@ -56,6 +56,21 @@ def test_commit_and_rollback(provider):
     assert res.fetchone() is None
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_autocommit(provider):
+    conn = connect(provider, ":memory:", None)
+    assert conn.in_transaction == False
+    cur = conn.cursor()
+    assert conn.in_transaction == False
+    cur.execute('CREATE TABLE users (id INTEGER, email TEXT)')
+    cur.execute("INSERT INTO users VALUES (?, ?)", (1, 'alice@example.com'))
+    assert conn.in_transaction == False
+    res = cur.execute("SELECT * FROM users")
+    assert (1, 'alice@example.com') == res.fetchone()
+    conn.rollback();
+    res = cur.execute("SELECT * FROM users")
+    assert (1, 'alice@example.com') == res.fetchone()
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_params(provider):
     conn = connect(provider, ":memory:")
     cur = conn.cursor()
@@ -85,9 +100,9 @@ def test_in_transaction(provider):
     cur.execute("INSERT INTO users VALUES (?, ?)", (2, 'bob@example.com'))
     assert conn.in_transaction == True
 
-def connect(provider, database):
+def connect(provider, database, isolation_level='DEFERRED'):
     if provider == "libsql":
-        return libsql_experimental.connect(database)
+        return libsql_experimental.connect(database, isolation_level = isolation_level)
     if provider == "sqlite":
-        return sqlite3.connect(database)
+        return sqlite3.connect(database, isolation_level = isolation_level)
     raise Exception(f"Provider `{provider}` is not supported")
