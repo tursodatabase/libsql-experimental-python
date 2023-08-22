@@ -122,7 +122,7 @@ Unimplemented.
 
 ### in_transaction
 
-Unimplemented.
+Returns `True` if there's an active transaction with uncommitted changes; otherwise returns `False`.
 
 ### isolation_level
 

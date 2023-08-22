@@ -32,8 +32,6 @@ fn connect(
         None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
     let conn = Arc::new(db.connect().map_err(to_py_err)?);
-    // TODO: Switch to libSQL transaction API
-    conn.execute("BEGIN", ()).map_err(to_py_err)?;
     Ok(Connection { db, conn, rt })
 }
 
@@ -64,15 +62,17 @@ impl Connection {
 
     fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
-        self_.conn.execute("COMMIT", ()).map_err(to_py_err)?;
-        self_.conn.execute("BEGIN", ()).map_err(to_py_err)?;
+        if !self_.conn.is_autocommit() {
+            self_.conn.execute("COMMIT", ()).map_err(to_py_err)?;
+        }
         Ok(())
     }
 
     fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
-        self_.conn.execute("ROLLBACK", ()).map_err(to_py_err)?;
-        self_.conn.execute("BEGIN", ()).map_err(to_py_err)?;
+        if !self_.conn.is_autocommit() {
+            self_.conn.execute("ROLLBACK", ()).map_err(to_py_err)?;
+        }
         Ok(())
     }
 
@@ -80,6 +80,11 @@ impl Connection {
         let mut cursor = Connection::cursor(self_)?;
         execute(&mut cursor, sql, parameters)?;
         Ok(cursor)
+    }
+
+    #[getter]
+    fn in_transaction(self_: PyRef<'_, Self>) -> PyResult<bool> {
+        Ok(!self_.conn.is_autocommit())
     }
 }
 
@@ -168,7 +173,16 @@ impl Cursor {
     }
 }
 
+fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
+    conn.execute("BEGIN", ()).map_err(to_py_err)?;
+    Ok(())
+}
+
 fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
+    if cursor.conn.is_autocommit() {
+        // TODO: Begin a transaction only for DML statements like Python module does.
+        begin_transaction(&cursor.conn)?;
+    }
     let params: libsql_core::Params = match parameters {
         Some(parameters) => {
             let mut params = vec![];

@@ -62,6 +62,17 @@ def test_fetchmany(provider):
     res = cur.execute("SELECT * FROM users")
     assert [(1, 'alice@example.com'), (2, 'bob@example.com')] == res.fetchall()
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_in_transaction(provider):
+    conn = connect(provider, ":memory:")
+    assert conn.in_transaction == False
+    cur = conn.cursor()
+    assert conn.in_transaction == False
+    cur.execute('CREATE TABLE users (id INTEGER, email TEXT)')
+    cur.execute("INSERT INTO users VALUES (?, ?)", (1, 'alice@example.com'))
+    cur.execute("INSERT INTO users VALUES (?, ?)", (2, 'bob@example.com'))
+    assert conn.in_transaction == True
+
 def connect(provider, database):
     if provider == "libsql":
         return libsql_experimental.connect(database)
