@@ -32,9 +32,9 @@ Rolls back the current transaction and starts a new one.
 
 Closes the database connection.
 
-### execute()
+### execute(sql, parameters=())
 
-Unimplemented.
+Create a new cursor object and executes the SQL statement.
 
 ### executemany()
 

@@ -75,6 +75,12 @@ impl Connection {
         self_.conn.execute("BEGIN", ()).map_err(to_py_err)?;
         Ok(())
     }
+
+    fn execute(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyTuple>) -> PyResult<Cursor> {
+        let mut cursor = Connection::cursor(self_)?;
+        execute(&mut cursor, sql, parameters)?;
+        Ok(cursor)
+    }
 }
 
 #[pyclass]
@@ -94,30 +100,7 @@ impl Cursor {
         sql: String,
         parameters: Option<&PyTuple>,
     ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
-        let params: libsql_core::Params = match parameters {
-            Some(parameters) => {
-                let mut params = vec![];
-                for parameter in parameters.iter() {
-                    let param = match parameter.extract::<i32>() {
-                        Ok(value) => libsql_core::Value::Integer(value as i64),
-                        Err(_) => match parameter.extract::<f64>() {
-                            Ok(value) => libsql_core::Value::Real(value),
-                            Err(_) => match parameter.extract::<&str>() {
-                                Ok(value) => libsql_core::Value::Text(value.to_string()),
-                                Err(_) => todo!(),
-                            },
-                        },
-                    };
-                    params.push(param);
-                }
-                libsql_core::Params::Positional(params)
-            }
-            None => libsql_core::Params::None,
-        };
-        let stmt = self_.conn.prepare(sql).map_err(to_py_err)?;
-        let rows = stmt.query(&params).map_err(to_py_err)?;
-        self_.stmt = Some(stmt);
-        self_.rows = Some(rows);
+        execute(&mut self_, sql, parameters)?;
         Ok(self_)
     }
 
@@ -183,6 +166,34 @@ impl Cursor {
         // TODO
         Ok(())
     }
+}
+
+fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
+    let params: libsql_core::Params = match parameters {
+        Some(parameters) => {
+            let mut params = vec![];
+            for parameter in parameters.iter() {
+                let param = match parameter.extract::<i32>() {
+                    Ok(value) => libsql_core::Value::Integer(value as i64),
+                    Err(_) => match parameter.extract::<f64>() {
+                        Ok(value) => libsql_core::Value::Real(value),
+                        Err(_) => match parameter.extract::<&str>() {
+                            Ok(value) => libsql_core::Value::Text(value.to_string()),
+                            Err(_) => todo!(),
+                        },
+                    },
+                };
+                params.push(param);
+            }
+            libsql_core::Params::Positional(params)
+        }
+        None => libsql_core::Params::None,
+    };
+    let stmt = cursor.conn.prepare(sql).map_err(to_py_err)?;
+    let rows = stmt.query(&params).map_err(to_py_err)?;
+    cursor.stmt = Some(stmt);
+    cursor.rows = Some(rows);
+    Ok(())
 }
 
 fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> PyResult<&PyTuple> {
