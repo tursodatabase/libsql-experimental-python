@@ -219,13 +219,16 @@ fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> Py
                 let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_core::ValueType::Real => todo!(),
-            libsql_core::ValueType::Blob => todo!(),
+            libsql_core::ValueType::Real => {
+                let value = row.get::<f64>(col_idx).map_err(to_py_err)?;
+                value.into_py(py)
+            },
+            libsql_core::ValueType::Blob => todo!("blobs not supported"),
             libsql_core::ValueType::Text => {
                 let value = row.get::<&str>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_core::ValueType::Null => todo!(),
+            libsql_core::ValueType::Null => py.None(),
         };
         elements.push(value);
     }
