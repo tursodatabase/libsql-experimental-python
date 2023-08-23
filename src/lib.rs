@@ -192,8 +192,7 @@ fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
 }
 
 fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
-    if !cursor.autocommit && cursor.conn.is_autocommit() {
-        // TODO: Begin a transaction only for DML statements like Python module does.
+    if !cursor.autocommit && stmt_is_dml(&sql) && cursor.conn.is_autocommit() {
         begin_transaction(&cursor.conn)?;
     }
     let params: libsql_core::Params = match parameters {
@@ -221,6 +220,12 @@ fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> Py
     cursor.stmt = Some(stmt);
     cursor.rows = Some(rows);
     Ok(())
+}
+
+fn stmt_is_dml(sql: &str) -> bool {
+    let sql = sql.trim();
+    let sql = sql.to_uppercase();
+    sql.starts_with("INSERT") || sql.starts_with("UPDATE") || sql.starts_with("DELETE")
 }
 
 fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> PyResult<&PyTuple> {
