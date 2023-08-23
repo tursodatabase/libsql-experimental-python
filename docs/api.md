@@ -196,7 +196,7 @@ Returns the row ID of the last inserted row.
 
 ### rowcount
 
-Unimplemented.
+Returns the number of rows changed by `INSERT`, `UPDATE`, `DELETE`, and `REPLACE` statements. For other types of statements, returns -1.
 
 ### row_factory
 

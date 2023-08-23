@@ -55,6 +55,7 @@ impl Connection {
             conn: self_.conn.clone(),
             stmt: None,
             rows: None,
+            rowcount: 0,
             autocommit: self_.autocommit,
         })
     }
@@ -97,6 +98,7 @@ pub struct Cursor {
     conn: Arc<libsql_core::Connection>,
     stmt: Option<libsql_core::Statement>,
     rows: Option<libsql_core::Rows>,
+    rowcount: i64,
     autocommit: bool,
 }
 
@@ -180,6 +182,11 @@ impl Cursor {
         }
     }
 
+    #[getter]
+    fn rowcount(self_: PyRef<'_, Self>) -> PyResult<i64> {
+        Ok(self_.rowcount)
+    }
+
     fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO
         Ok(())
@@ -192,7 +199,8 @@ fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
 }
 
 fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
-    if !cursor.autocommit && stmt_is_dml(&sql) && cursor.conn.is_autocommit() {
+    let stmt_is_dml = stmt_is_dml(&sql);
+    if !cursor.autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
         begin_transaction(&cursor.conn)?;
     }
     let params: libsql_core::Params = match parameters {
@@ -217,6 +225,11 @@ fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> Py
     };
     let stmt = cursor.conn.prepare(sql).map_err(to_py_err)?;
     let rows = stmt.query(&params).map_err(to_py_err)?;
+    if stmt_is_dml {
+        cursor.rowcount += cursor.conn.changes() as i64;
+    } else {
+        cursor.rowcount = -1;
+    }
     cursor.stmt = Some(stmt);
     cursor.rows = Some(rows);
     Ok(())
