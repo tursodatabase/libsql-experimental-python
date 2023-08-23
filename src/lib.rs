@@ -87,6 +87,15 @@ impl Connection {
         Ok(cursor)
     }
 
+    fn executemany(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyList>) -> PyResult<Cursor> {
+        let mut cursor = Connection::cursor(self_)?;
+        for parameters in parameters.unwrap().iter() {
+            let parameters = parameters.extract::<&PyTuple>()?;
+            execute(&mut cursor, sql.clone(), Some(parameters))?;
+        }
+        Ok(cursor)
+    }
+
     #[getter]
     fn in_transaction(self_: PyRef<'_, Self>) -> PyResult<bool> {
         Ok(!self_.conn.is_autocommit())
@@ -113,6 +122,18 @@ impl Cursor {
         parameters: Option<&PyTuple>,
     ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
         execute(&mut self_, sql, parameters)?;
+        Ok(self_)
+    }
+
+    fn executemany<'a>(
+        mut self_: PyRefMut<'a, Self>,
+        sql: String,
+        parameters: Option<&PyList>,
+    ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
+        for parameters in parameters.unwrap().iter() {
+            let parameters = parameters.extract::<&PyTuple>()?;
+            execute(&mut self_, sql.clone(), Some(parameters))?;
+        }
         Ok(self_)
     }
 

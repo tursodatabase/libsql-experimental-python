@@ -22,6 +22,32 @@ def test_cursor_execute(provider):
     assert (1, 'alice@example.com') == res.fetchone()
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_executemany(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    data = [
+        (1, 'alice@example.com'),
+        (2, 'bob@example.com')
+    ]
+    conn.executemany("INSERT INTO users VALUES (?, ?)", data)
+    res = cur.execute("SELECT * FROM users")
+    assert [(1, 'alice@example.com'), (2, 'bob@example.com')] == res.fetchall()
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_cursor_executemany(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    data = [
+        (1, 'alice@example.com'),
+        (2, 'bob@example.com')
+    ]
+    cur.executemany("INSERT INTO users VALUES (?, ?)", data)
+    res = cur.execute("SELECT * FROM users")
+    assert [(1, 'alice@example.com'), (2, 'bob@example.com')] == res.fetchall()
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_lastrowid(provider):
     conn = connect(provider, ":memory:")
     cur = conn.cursor()

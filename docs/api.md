@@ -36,9 +36,14 @@ Closes the database connection.
 
 Create a new cursor object and executes the SQL statement.
 
-### executemany()
+### executemany(sql, parameters)
 
-Unimplemented.
+Create a new cursor object and Execute the SQL statement for every item in `parameters` array.
+
+| Param      | Type                | Description                                    |
+| ---------- | ------------------- | ---------------------------------------------- |
+| sql        | <code>string</code> | Path to the database file                      |
+| parameters | <code>array</code>  | Array of parameter tuples to execute SQL with. |
 
 ### executescript()
 
@@ -148,7 +153,12 @@ Execute one SQL statement.
 
 ### executemany(sql, parameters)
 
-Unimplemented.
+Execute the SQL statement for every item in `parameters` array.
+
+| Param      | Type                | Description                                    |
+| ---------- | ------------------- | ---------------------------------------------- |
+| sql        | <code>string</code> | Path to the database file                      |
+| parameters | <code>array</code>  | Array of parameter tuples to execute SQL with. |
 
 ### executescript()
 
