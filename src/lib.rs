@@ -16,19 +16,19 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, isolation_level="DEFERRED", check_same_thread=true, uri=false, sync_url=None, sync_auth=""))]
+#[pyo3(signature = (database, isolation_level="DEFERRED", check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
 fn connect(
     database: String,
     isolation_level: Option<&str>,
     check_same_thread: bool,
     uri: bool,
     sync_url: Option<String>,
-    sync_auth: &str,
+    auth_token: &str,
 ) -> PyResult<Connection> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
-            let fut = libsql::v2::Database::open_with_sync(database, sync_url, sync_auth);
+            let fut = libsql::v2::Database::open_with_sync(database, sync_url, auth_token);
             let result = rt.block_on(fut);
             result.map_err(to_py_err)?
         }
