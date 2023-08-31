@@ -3,6 +3,8 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
@@ -26,21 +28,22 @@ fn connect(
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
-            let opts = libsql_core::Opts::with_http_sync(sync_url, sync_auth);
-            rt.block_on(libsql_core::Database::open_with_opts(database, opts))
-                .map_err(to_py_err)?
+            let fut = libsql::v2::Database::open_with_sync(database, sync_url, sync_auth);
+            let result = rt.block_on(fut);
+            result.map_err(to_py_err)?
         }
-        None => libsql_core::Database::open(database).map_err(to_py_err)?,
+        None => libsql_core::v2::Database::open(database).map_err(to_py_err)?,
     };
     let autocommit = isolation_level.is_none();
-    let conn = Arc::new(db.connect().map_err(to_py_err)?);
+    let conn = rt.block_on(db.connect()).map_err(to_py_err)?;
+    let conn = Arc::new(conn);
     Ok(Connection { db, conn, rt, autocommit })
 }
 
 #[pyclass]
 pub struct Connection {
-    db: libsql_core::Database,
-    conn: Arc<libsql_core::Connection>,
+    db: libsql_core::v2::Database,
+    conn: Arc<libsql_core::v2::Connection>,
     rt: tokio::runtime::Runtime,
     autocommit: bool,
 }
@@ -50,13 +53,14 @@ unsafe impl Send for Connection {}
 
 #[pymethods]
 impl Connection {
-    fn cursor(self_: PyRef<'_, Self>) -> PyResult<Cursor> {
+    fn cursor(&self) -> PyResult<Cursor> {
         Ok(Cursor {
-            conn: self_.conn.clone(),
-            stmt: None,
-            rows: None,
-            rowcount: 0,
-            autocommit: self_.autocommit,
+            rt: self.rt.handle().clone(),
+            conn: self.conn.clone(),
+            stmt: RefCell::new(None),
+            rows: RefCell::new(None),
+            rowcount: RefCell::new(0),
+            autocommit: self.autocommit,
         })
     }
 
@@ -68,7 +72,7 @@ impl Connection {
     fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_.conn.execute("COMMIT", ()).map_err(to_py_err)?;
+            self_.rt.block_on(self_.conn.execute("COMMIT", ())).map_err(to_py_err)?;
         }
         Ok(())
     }
@@ -76,22 +80,23 @@ impl Connection {
     fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_.conn.execute("ROLLBACK", ()).map_err(to_py_err)?;
+            self_.rt.block_on(self_.conn.execute("ROLLBACK", ())).map_err(to_py_err)?;
         }
         Ok(())
     }
 
     fn execute(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyTuple>) -> PyResult<Cursor> {
-        let mut cursor = Connection::cursor(self_)?;
-        execute(&mut cursor, sql, parameters)?;
+        let cursor = Connection::cursor(&self_)?;
+        let rt = self_.rt.handle();
+        rt.block_on(execute(&cursor, sql, parameters))?;
         Ok(cursor)
     }
 
     fn executemany(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyList>) -> PyResult<Cursor> {
-        let mut cursor = Connection::cursor(self_)?;
+        let cursor = Connection::cursor(&self_)?;
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            execute(&mut cursor, sql.clone(), Some(parameters))?;
+            self_.rt.block_on(execute(&cursor, sql.clone(), Some(parameters)))?;
         }
         Ok(cursor)
     }
@@ -104,10 +109,11 @@ impl Connection {
 
 #[pyclass]
 pub struct Cursor {
-    conn: Arc<libsql_core::Connection>,
-    stmt: Option<libsql_core::Statement>,
-    rows: Option<libsql_core::Rows>,
-    rowcount: i64,
+    rt: tokio::runtime::Handle,
+    conn: Arc<libsql_core::v2::Connection>,
+    stmt: RefCell<Option<libsql_core::v2::Statement>>,
+    rows: RefCell<Option<libsql_core::v2::Rows>>,
+    rowcount: RefCell<i64>,
     autocommit: bool,
 }
 
@@ -117,31 +123,31 @@ unsafe impl Send for Cursor {}
 #[pymethods]
 impl Cursor {
     fn execute<'a>(
-        mut self_: PyRefMut<'a, Self>,
+        self_: PyRef<'a, Self>,
         sql: String,
         parameters: Option<&PyTuple>,
-    ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
-        execute(&mut self_, sql, parameters)?;
+    ) -> PyResult<pyo3::PyRef<'a, Self>> {
+        self_.rt.block_on(execute(&self_, sql, parameters))?;
         Ok(self_)
     }
 
     fn executemany<'a>(
-        mut self_: PyRefMut<'a, Self>,
+        self_: PyRef<'a, Self>,
         sql: String,
         parameters: Option<&PyList>,
-    ) -> PyResult<pyo3::PyRefMut<'a, Cursor>> {
+    ) -> PyResult<pyo3::PyRef<'a, Cursor>> {
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            execute(&mut self_, sql.clone(), Some(parameters))?;
+            self_.rt.block_on(execute(&self_, sql.clone(), Some(parameters)))?;
         }
         Ok(self_)
     }
 
     #[getter]
     fn description(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
-        let stmt = self_.stmt.as_ref().unwrap();
+        let stmt = self_.stmt.borrow();
         let mut elements: Vec<Py<PyAny>> = vec![];
-        for column in stmt.columns() {
+        for column in stmt.as_ref().unwrap().columns() {
             let name = column.name();
             let element = (
                 name,
@@ -160,8 +166,9 @@ impl Cursor {
     }
 
     fn fetchone(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
-        match self_.rows {
-            Some(ref rows) => {
+        let mut rows = self_.rows.borrow_mut();
+        match rows.as_mut() {
+            Some(rows) => {
                 let row = rows.next().map_err(to_py_err)?;
                 match row {
                     Some(row) => {
@@ -176,8 +183,9 @@ impl Cursor {
     }
 
     fn fetchall(self_: PyRef<'_, Self>) -> PyResult<Option<&PyList>> {
-        match self_.rows {
-            Some(ref rows) => {
+        let mut rows = self_.rows.borrow_mut();
+        match rows.as_mut() {
+            Some(rows) => {
                 let mut elements: Vec<Py<PyAny>> = vec![];
                 loop {
                     let row = rows.next().map_err(to_py_err)?;
@@ -197,7 +205,8 @@ impl Cursor {
 
     #[getter]
     fn lastrowid(self_: PyRef<'_, Self>) -> PyResult<Option<i64>> {
-        match self_.stmt {
+        let stmt = self_.stmt.borrow();
+        match stmt.as_ref() {
             Some(_) => Ok(Some(self_.conn.last_insert_rowid())),
             None => Ok(None),
         }
@@ -205,7 +214,7 @@ impl Cursor {
 
     #[getter]
     fn rowcount(self_: PyRef<'_, Self>) -> PyResult<i64> {
-        Ok(self_.rowcount)
+        Ok(*self_.rowcount.borrow())
     }
 
     fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
@@ -214,15 +223,15 @@ impl Cursor {
     }
 }
 
-fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
-    conn.execute("BEGIN", ()).map_err(to_py_err)?;
+async fn begin_transaction(conn: &libsql_core::v2::Connection) -> PyResult<()> {
+    conn.execute("BEGIN", ()).await.map_err(to_py_err)?;
     Ok(())
 }
 
-fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
+async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
     let stmt_is_dml = stmt_is_dml(&sql);
     if !cursor.autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
-        begin_transaction(&cursor.conn)?;
+        begin_transaction(&cursor.conn).await?;
     }
     let params: libsql_core::Params = match parameters {
         Some(parameters) => {
@@ -244,15 +253,16 @@ fn execute(cursor: &mut Cursor, sql: String, parameters: Option<&PyTuple>) -> Py
         }
         None => libsql_core::Params::None,
     };
-    let stmt = cursor.conn.prepare(sql).map_err(to_py_err)?;
-    let rows = stmt.query(&params).map_err(to_py_err)?;
+    let stmt = cursor.conn.prepare(&sql).await.map_err(to_py_err)?;
+    let rows = stmt.query(&params).await.map_err(to_py_err)?;
     if stmt_is_dml {
-        cursor.rowcount += cursor.conn.changes() as i64;
+        let mut rowcount = cursor.rowcount.borrow_mut();
+        *rowcount += cursor.conn.changes() as i64;
     } else {
-        cursor.rowcount = -1;
+        cursor.rowcount.replace(-1);
     }
-    cursor.stmt = Some(stmt);
-    cursor.rows = Some(rows);
+    cursor.stmt.replace(Some(stmt));
+    cursor.rows.replace(Some(rows));
     Ok(())
 }
 
@@ -262,7 +272,7 @@ fn stmt_is_dml(sql: &str) -> bool {
     sql.starts_with("INSERT") || sql.starts_with("UPDATE") || sql.starts_with("DELETE")
 }
 
-fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> PyResult<&PyTuple> {
+fn convert_row(py: Python, row: libsql_core::v2::Row, column_count: i32) -> PyResult<&PyTuple> {
     let mut elements: Vec<Py<PyAny>> = vec![];
     for col_idx in 0..column_count {
         let col_type = row.column_type(col_idx).map_err(to_py_err)?;
@@ -277,7 +287,7 @@ fn convert_row(py: Python, row: libsql_core::rows::Row, column_count: i32) -> Py
             },
             libsql_core::ValueType::Blob => todo!("blobs not supported"),
             libsql_core::ValueType::Text => {
-                let value = row.get::<&str>(col_idx).map_err(to_py_err)?;
+                let value = row.get::<String>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
             libsql_core::ValueType::Null => py.None(),
