@@ -3,13 +3,12 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::sync::Arc;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     let msg = match error {
-        libsql::Error::PrepareFailed(_, _, err) => err,
+        libsql::Error::SqliteFailure(_, err) => err,
         _ => error.to_string(),
     };
     PyValueError::new_err(msg)
@@ -28,22 +27,22 @@ fn connect(
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
-            let fut = libsql::v2::Database::open_with_sync(database, sync_url, auth_token);
+            let fut = libsql::Database::open_with_remote_sync(database, sync_url, auth_token);
             let result = rt.block_on(fut);
             result.map_err(to_py_err)?
         }
-        None => libsql_core::v2::Database::open(database).map_err(to_py_err)?,
+        None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
     let autocommit = isolation_level.is_none();
-    let conn = rt.block_on(db.connect()).map_err(to_py_err)?;
+    let conn = db.connect().map_err(to_py_err)?;
     let conn = Arc::new(conn);
     Ok(Connection { db, conn, rt, autocommit })
 }
 
 #[pyclass]
 pub struct Connection {
-    db: libsql_core::v2::Database,
-    conn: Arc<libsql_core::v2::Connection>,
+    db: libsql_core::Database,
+    conn: Arc<libsql_core::Connection>,
     rt: tokio::runtime::Runtime,
     autocommit: bool,
 }
@@ -110,9 +109,9 @@ impl Connection {
 #[pyclass]
 pub struct Cursor {
     rt: tokio::runtime::Handle,
-    conn: Arc<libsql_core::v2::Connection>,
-    stmt: RefCell<Option<libsql_core::v2::Statement>>,
-    rows: RefCell<Option<libsql_core::v2::Rows>>,
+    conn: Arc<libsql_core::Connection>,
+    stmt: RefCell<Option<libsql_core::Statement>>,
+    rows: RefCell<Option<libsql_core::Rows>>,
     rowcount: RefCell<i64>,
     autocommit: bool,
 }
@@ -223,7 +222,7 @@ impl Cursor {
     }
 }
 
-async fn begin_transaction(conn: &libsql_core::v2::Connection) -> PyResult<()> {
+async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
     conn.execute("BEGIN", ()).await.map_err(to_py_err)?;
     Ok(())
 }
@@ -233,7 +232,7 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
     if !cursor.autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
         begin_transaction(&cursor.conn).await?;
     }
-    let params: libsql_core::Params = match parameters {
+    let params = match parameters {
         Some(parameters) => {
             let mut params = vec![];
             for parameter in parameters.iter() {
@@ -249,12 +248,12 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
                 };
                 params.push(param);
             }
-            libsql_core::Params::Positional(params)
+            libsql_core::params::Params::Positional(params)
         }
-        None => libsql_core::Params::None,
+        None => libsql_core::params::Params::None,
     };
-    let stmt = cursor.conn.prepare(&sql).await.map_err(to_py_err)?;
-    let rows = stmt.query(&params).await.map_err(to_py_err)?;
+    let mut stmt = cursor.conn.prepare(&sql).await.map_err(to_py_err)?;
+    let rows = stmt.query(params).await.map_err(to_py_err)?;
     if stmt_is_dml {
         let mut rowcount = cursor.rowcount.borrow_mut();
         *rowcount += cursor.conn.changes() as i64;
@@ -272,25 +271,25 @@ fn stmt_is_dml(sql: &str) -> bool {
     sql.starts_with("INSERT") || sql.starts_with("UPDATE") || sql.starts_with("DELETE")
 }
 
-fn convert_row(py: Python, row: libsql_core::v2::Row, column_count: i32) -> PyResult<&PyTuple> {
+fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult<&PyTuple> {
     let mut elements: Vec<Py<PyAny>> = vec![];
     for col_idx in 0..column_count {
         let col_type = row.column_type(col_idx).map_err(to_py_err)?;
         let value = match col_type {
-            libsql_core::ValueType::Integer => {
+            libsql_sys::ValueType::Integer => {
                 let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_core::ValueType::Real => {
+            libsql_sys::ValueType::Real => {
                 let value = row.get::<f64>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             },
-            libsql_core::ValueType::Blob => todo!("blobs not supported"),
-            libsql_core::ValueType::Text => {
+            libsql_sys::ValueType::Blob => todo!("blobs not supported"),
+            libsql_sys::ValueType::Text => {
                 let value = row.get::<String>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_core::ValueType::Null => py.None(),
+            libsql_sys::ValueType::Null => py.None(),
         };
         elements.push(value);
     }

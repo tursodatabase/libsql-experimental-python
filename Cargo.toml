@@ -9,10 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.19.0"
-libsql = { git = "https://github.com/libsql/libsql/", rev = "d36276eab153a88aee724268bc01a648619abe9a" }
+libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "4875412c3867ea10d46a9b23404eebba8a45f9f1" }
+libsql-sys = { git = "https://github.com/tursodatabase/libsql/", rev = "4875412c3867ea10d46a9b23404eebba8a45f9f1" }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
-
-[patch.crates-io]
-tonic = { git = "https://github.com/hyperium/tonic" }
-tonic-web = { git = "https://github.com/hyperium/tonic" }
-tower-http = { git = "https://github.com/tower-rs/tower-http", branch = "lucio/grpc-defaults" }
