@@ -276,20 +276,20 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
     for col_idx in 0..column_count {
         let col_type = row.column_type(col_idx).map_err(to_py_err)?;
         let value = match col_type {
-            libsql_sys::ValueType::Integer => {
+            libsql::ValueType::Integer => {
                 let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_sys::ValueType::Real => {
+            libsql::ValueType::Real => {
                 let value = row.get::<f64>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             },
-            libsql_sys::ValueType::Blob => todo!("blobs not supported"),
-            libsql_sys::ValueType::Text => {
+            libsql::ValueType::Blob => todo!("blobs not supported"),
+            libsql::ValueType::Text => {
                 let value = row.get::<String>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
             }
-            libsql_sys::ValueType::Null => py.None(),
+            libsql::ValueType::Null => py.None(),
         };
         elements.push(value);
     }
