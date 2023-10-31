@@ -9,5 +9,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.19.0"
-libsql = { git = "https://github.com/psarna/libsql/", rev = "a1d4c524ce81850a0991a1e99743c641ee7692f4" }
+libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "7d56a4960c3b4b63e92c53c685c787aaa37ab0f9" }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
