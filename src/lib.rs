@@ -27,7 +27,15 @@ fn connect(
     let rt = tokio::runtime::Runtime::new().unwrap();
     let db = match sync_url {
         Some(sync_url) => {
-            let fut = libsql::Database::open_with_remote_sync(database, sync_url, auth_token);
+            let ver = env!("CARGO_PKG_VERSION");
+            let ver = format!("libsql-python-{ver}");
+
+            let fut = libsql::Database::open_with_remote_sync_internal(
+                database,
+                sync_url,
+                auth_token,
+                Some(ver),
+            );
             let result = rt.block_on(fut);
             result.map_err(to_py_err)?
         }
@@ -36,7 +44,12 @@ fn connect(
     let autocommit = isolation_level.is_none();
     let conn = db.connect().map_err(to_py_err)?;
     let conn = Arc::new(conn);
-    Ok(Connection { db, conn, rt, autocommit })
+    Ok(Connection {
+        db,
+        conn,
+        rt,
+        autocommit,
+    })
 }
 
 #[pyclass]
@@ -71,7 +84,10 @@ impl Connection {
     fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_.rt.block_on(self_.conn.execute("COMMIT", ())).map_err(to_py_err)?;
+            self_
+                .rt
+                .block_on(self_.conn.execute("COMMIT", ()))
+                .map_err(to_py_err)?;
         }
         Ok(())
     }
@@ -79,23 +95,36 @@ impl Connection {
     fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_.rt.block_on(self_.conn.execute("ROLLBACK", ())).map_err(to_py_err)?;
+            self_
+                .rt
+                .block_on(self_.conn.execute("ROLLBACK", ()))
+                .map_err(to_py_err)?;
         }
         Ok(())
     }
 
-    fn execute(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyTuple>) -> PyResult<Cursor> {
+    fn execute(
+        self_: PyRef<'_, Self>,
+        sql: String,
+        parameters: Option<&PyTuple>,
+    ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
         let rt = self_.rt.handle();
         rt.block_on(execute(&cursor, sql, parameters))?;
         Ok(cursor)
     }
 
-    fn executemany(self_: PyRef<'_, Self>, sql: String, parameters: Option<&PyList>) -> PyResult<Cursor> {
+    fn executemany(
+        self_: PyRef<'_, Self>,
+        sql: String,
+        parameters: Option<&PyList>,
+    ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            self_.rt.block_on(execute(&cursor, sql.clone(), Some(parameters)))?;
+            self_
+                .rt
+                .block_on(execute(&cursor, sql.clone(), Some(parameters)))?;
         }
         Ok(cursor)
     }
@@ -137,7 +166,9 @@ impl Cursor {
     ) -> PyResult<pyo3::PyRef<'a, Cursor>> {
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            self_.rt.block_on(execute(&self_, sql.clone(), Some(parameters)))?;
+            self_
+                .rt
+                .block_on(execute(&self_, sql.clone(), Some(parameters)))?;
         }
         Ok(self_)
     }
@@ -216,7 +247,7 @@ impl Cursor {
         Ok(*self_.rowcount.borrow())
     }
 
-    fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
+    fn close(_self: PyRef<'_, Self>) -> PyResult<()> {
         // TODO
         Ok(())
     }
@@ -283,7 +314,7 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
             libsql::ValueType::Real => {
                 let value = row.get::<f64>(col_idx).map_err(to_py_err)?;
                 value.into_py(py)
-            },
+            }
             libsql::ValueType::Blob => todo!("blobs not supported"),
             libsql::ValueType::Text => {
                 let value = row.get::<String>(col_idx).map_err(to_py_err)?;
