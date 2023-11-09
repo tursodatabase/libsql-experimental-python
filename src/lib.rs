@@ -28,7 +28,7 @@ fn connect(
     let db = match sync_url {
         Some(sync_url) => {
             let ver = env!("CARGO_PKG_VERSION");
-            let ver = format!("libsql-python-{ver}");
+            let ver = format!("libsql-python-rpc-{ver}");
 
             let fut = libsql::Database::open_with_remote_sync_internal(
                 database,
