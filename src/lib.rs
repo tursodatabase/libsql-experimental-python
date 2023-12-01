@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::cell::RefCell;
 use std::sync::Arc;
+use log::trace;
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     let msg = match error {
@@ -155,6 +156,7 @@ impl Cursor {
         sql: String,
         parameters: Option<&PyTuple>,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
+        trace!("execute: sql={}", sql);
         self_.rt.block_on(execute(&self_, sql, parameters))?;
         Ok(self_)
     }
@@ -164,6 +166,7 @@ impl Cursor {
         sql: String,
         parameters: Option<&PyList>,
     ) -> PyResult<pyo3::PyRef<'a, Cursor>> {
+        trace!("executemany: sql={}", sql);
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
             self_
@@ -175,6 +178,7 @@ impl Cursor {
 
     #[getter]
     fn description(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
+        trace!("description");
         let stmt = self_.stmt.borrow();
         let mut elements: Vec<Py<PyAny>> = vec![];
         for column in stmt.as_ref().unwrap().columns() {
@@ -196,6 +200,7 @@ impl Cursor {
     }
 
     fn fetchone(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
+        trace!("fetchone");
         let mut rows = self_.rows.borrow_mut();
         match rows.as_mut() {
             Some(rows) => {
@@ -213,6 +218,7 @@ impl Cursor {
     }
 
     fn fetchall(self_: PyRef<'_, Self>) -> PyResult<Option<&PyList>> {
+        trace!("fetchall");
         let mut rows = self_.rows.borrow_mut();
         match rows.as_mut() {
             Some(rows) => {
@@ -235,6 +241,7 @@ impl Cursor {
 
     #[getter]
     fn lastrowid(self_: PyRef<'_, Self>) -> PyResult<Option<i64>> {
+        trace!("lastrowid");
         let stmt = self_.stmt.borrow();
         match stmt.as_ref() {
             Some(_) => Ok(Some(self_.conn.last_insert_rowid())),
@@ -244,16 +251,19 @@ impl Cursor {
 
     #[getter]
     fn rowcount(self_: PyRef<'_, Self>) -> PyResult<i64> {
+        trace!("rowcount");
         Ok(*self_.rowcount.borrow())
     }
 
     fn close(_self: PyRef<'_, Self>) -> PyResult<()> {
+        trace!("close");
         // TODO
         Ok(())
     }
 }
 
 async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
+    trace!("begin_transaction");
     conn.execute("BEGIN", ()).await.map_err(to_py_err)?;
     Ok(())
 }
@@ -284,7 +294,7 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         None => libsql_core::params::Params::None,
     };
     let mut stmt = cursor.conn.prepare(&sql).await.map_err(to_py_err)?;
-    let rows = stmt.query(params).await.map_err(to_py_err)?;
+    let rows = stmt.execute(params).await.map_err(to_py_err)?;
     if stmt_is_dml {
         let mut rowcount = cursor.rowcount.borrow_mut();
         *rowcount += cursor.conn.changes() as i64;
@@ -292,7 +302,7 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         cursor.rowcount.replace(-1);
     }
     cursor.stmt.replace(Some(stmt));
-    cursor.rows.replace(Some(rows));
+    //cursor.rows.replace(Some(rows));
     Ok(())
 }
 

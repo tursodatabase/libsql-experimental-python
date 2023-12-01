@@ -703,9 +703,10 @@ dependencies = [
 
 [[package]]
 name = "libsql-python"
-version = "0.0.19"
+version = "0.0.20"
 dependencies = [
  "libsql",
+ "log",
  "pyo3",
  "tokio",
  "tracing-subscriber",

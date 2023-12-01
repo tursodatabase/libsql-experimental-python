@@ -1,13 +1,12 @@
-import libsql_experimental
+import os
 
-con = libsql_experimental.connect("hello.db", sync_url="http://localhost:8080",
-                                  auth_token="")
+import libsql_experimental as libsql
 
-con.sync()
+print(F"syncing with {os.getenv('LIBSQL_URL')}")
+conn = libsql.connect("hello_sync.db", sync_url=os.getenv("LIBSQL_URL"),
+                      auth_token=os.getenv("LIBSQL_AUTH_TOKEN"))
+conn.execute("CREATE TABLE IF NOT EXISTS users_sync (id INTEGER);")
+conn.execute("INSERT INTO users_sync(id) VALUES (1);")
+conn.commit()
 
-cur = con.cursor()
-
-cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER, email TEXT);")
-cur.execute("INSERT INTO users VALUES (1, 'penberg@iki.fi')")
-
-print(cur.execute("SELECT * FROM users").fetchone())
+print(conn.execute("select * from users_sync").fetchall())
