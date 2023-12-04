@@ -67,12 +67,14 @@ unsafe impl Send for Connection {}
 impl Connection {
     fn cursor(&self) -> PyResult<Cursor> {
         Ok(Cursor {
+            arraysize: 1,
             rt: self.rt.handle().clone(),
             conn: self.conn.clone(),
             stmt: RefCell::new(None),
             rows: RefCell::new(None),
             rowcount: RefCell::new(0),
             autocommit: self.autocommit,
+            done: RefCell::new(false),
         })
     }
 
@@ -137,11 +139,14 @@ impl Connection {
 
 #[pyclass]
 pub struct Cursor {
+    #[pyo3(get, set)]
+    arraysize: usize,
     rt: tokio::runtime::Handle,
     conn: Arc<libsql_core::Connection>,
     stmt: RefCell<Option<libsql_core::Statement>>,
     rows: RefCell<Option<libsql_core::Rows>>,
     rowcount: RefCell<i64>,
+    done: RefCell<bool>,
     autocommit: bool,
 }
 
@@ -207,6 +212,36 @@ impl Cursor {
                     }
                     None => Ok(None),
                 }
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn fetchmany(self_: PyRef<'_, Self>, size: Option<i64>) -> PyResult<Option<&PyList>> {
+        let mut rows = self_.rows.borrow_mut();
+        match rows.as_mut() {
+            Some(rows) => {
+                let size = size.unwrap_or(self_.arraysize as i64);
+                let mut elements: Vec<Py<PyAny>> = vec![];
+                // The libSQL Rows.next() method restarts the iteration if it
+                // has reached the end, which is why we need to check if we're
+                // done before iterating.
+                if !*self_.done.borrow() {
+                    for _ in 0..size {
+                        let row = rows.next().map_err(to_py_err)?;
+                        match row {
+                            Some(row) => {
+                                let row = convert_row(self_.py(), row, rows.column_count())?;
+                                elements.push(row.into());
+                            }
+                            None => {
+                                self_.done.replace(true);
+                                break
+                            }
+                        }
+                    }
+                    }
+                Ok(Some(PyList::new(self_.py(), elements)))
             }
             None => Ok(None),
         }
