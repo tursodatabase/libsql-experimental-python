@@ -14,6 +14,10 @@ You can install the current release _(MacOS and Linux)_:
 $ pip install libsql-experimental
 ```
 
+## Documentation
+
+* [API reference](docs/api.md)
+
 ## Getting Started
 
 To try out your first libsql program, start the Python interpreter:
