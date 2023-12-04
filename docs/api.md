@@ -168,9 +168,9 @@ Unimplemented.
 
 Return next row in result set.
 
-### fetchmany()
+### fetchmany(size = cursor.arraysize)
 
-Unimplemented.
+Return `size` next rows in result set. If there are no more rows left, returns an empty list.
 
 ### fetchall()
 
@@ -190,7 +190,7 @@ Unimplemented.
 
 ### arraysize
 
-Unimplemented.
+The number of rows returned by `fetchmany()` by default.
 
 ### connection
 
