@@ -47,6 +47,25 @@ def test_cursor_fetchone(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, 'alice@example.com') == res.fetchone()
 
+@pytest.mark.parametrize("provider", ["sqlite", "libsql"])
+def test_cursor_fetchmany(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    data = [
+        (1, 'alice@example.com'),
+        (2, 'bob@example.com'),
+        (3, 'carol@example.com'),
+        (4, 'dave@example.com'),
+        (5, 'erin@example.com')
+    ]
+    cur.executemany("INSERT INTO users VALUES (?, ?)", data)
+    res = cur.execute("SELECT * FROM users")
+    assert [(1, 'alice@example.com'), (2, 'bob@example.com')] == res.fetchmany(2)
+    assert [(3, 'carol@example.com'), (4, 'dave@example.com')] == res.fetchmany(2)
+    assert [(5, 'erin@example.com')] == res.fetchmany(2)
+    assert [] == res.fetchmany(2)
+
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_cursor_executemany(provider):
     conn = connect(provider, ":memory:")
