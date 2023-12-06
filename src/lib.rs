@@ -14,6 +14,10 @@ fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     PyValueError::new_err(msg)
 }
 
+fn is_remote_path(path: &str) -> bool {
+    path.starts_with("libsql://") || path.starts_with("http://") || path.starts_with("https://")
+}
+
 #[pyfunction]
 #[pyo3(signature = (database, isolation_level="DEFERRED", check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
 fn connect(
@@ -24,22 +28,26 @@ fn connect(
     sync_url: Option<String>,
     auth_token: &str,
 ) -> PyResult<Connection> {
+    let ver = env!("CARGO_PKG_VERSION");
+    let ver = format!("libsql-python-rpc-{ver}");
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let db = match sync_url {
-        Some(sync_url) => {
-            let ver = env!("CARGO_PKG_VERSION");
-            let ver = format!("libsql-python-rpc-{ver}");
-
-            let fut = libsql::Database::open_with_remote_sync_internal(
-                database,
-                sync_url,
-                auth_token,
-                Some(ver),
-            );
-            let result = rt.block_on(fut);
-            result.map_err(to_py_err)?
+    let db = if is_remote_path(&database) {
+        let result = libsql::Database::open_remote_internal(database.clone(), auth_token, ver);
+        result.map_err(to_py_err)?
+    } else {
+        match sync_url {
+            Some(sync_url) => {
+                let fut = libsql::Database::open_with_remote_sync_internal(
+                    database,
+                    sync_url,
+                    auth_token,
+                    Some(ver),
+                );
+                let result = rt.block_on(fut);
+                result.map_err(to_py_err)?
+            }
+            None => libsql_core::Database::open(database).map_err(to_py_err)?,
         }
-        None => libsql_core::Database::open(database).map_err(to_py_err)?,
     };
     let autocommit = isolation_level.is_none();
     let conn = db.connect().map_err(to_py_err)?;
