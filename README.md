@@ -49,6 +49,18 @@ con = libsql.connect("hello.db")
 cur = con.cursor()
 ```
 
+#### Remote database
+
+```python
+import libsql_experimental as libsql
+
+url = os.getenv("LIBSQL_URL")
+auth_token = os.getenv("LIBSQL_AUTH_TOKEN")
+
+con = libsql.connect(database=url, auth_token=auth_token)
+cur = con.cursor()
+```
+
 #### Embedded replica
 
 ```python
