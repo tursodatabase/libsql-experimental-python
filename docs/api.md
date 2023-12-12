@@ -123,7 +123,7 @@ Unimplemented.
 
 ### autocommit
 
-Unimplemented.
+The driver only supports the legacy `isolation_level`-based transaction mode control and does not implement the `autocommit` property yet (see issue [#30](https://github.com/libsql/libsql-experimental-python/issues/30) for details).
 
 ### in_transaction
 
@@ -131,7 +131,7 @@ Returns `True` if there's an active transaction with uncommitted changes; otherw
 
 ### isolation_level
 
-Unimplemented.
+Transaction handling mode configuration. If `isolation_level` is set to `"DEFERRED"`, `"IMMEDIATE"`, or `"EXCLUSIVE"`, transactions begin implicitly, but need to be committed manually. If `isolation_level` is set to `None`, then database is in auto-commit mode, executing each statement in its own transaction.
 
 ### row_factory
 
