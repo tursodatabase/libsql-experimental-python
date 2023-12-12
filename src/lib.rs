@@ -19,10 +19,10 @@ fn is_remote_path(path: &str) -> bool {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, isolation_level="DEFERRED", check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
+#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
 fn connect(
     database: String,
-    isolation_level: Option<&str>,
+    isolation_level: Option<String>,
     check_same_thread: bool,
     uri: bool,
     sync_url: Option<String>,
@@ -56,6 +56,7 @@ fn connect(
         db,
         conn,
         rt,
+        isolation_level,
         autocommit,
     })
 }
@@ -65,6 +66,7 @@ pub struct Connection {
     db: libsql_core::Database,
     conn: Arc<libsql_core::Connection>,
     rt: tokio::runtime::Runtime,
+    isolation_level: Option<String>,
     autocommit: bool,
 }
 
@@ -137,6 +139,11 @@ impl Connection {
                 .block_on(execute(&cursor, sql.clone(), Some(parameters)))?;
         }
         Ok(cursor)
+    }
+
+    #[getter]
+    fn isolation_level(self_: PyRef<'_, Self>) -> Option<String> {
+        self_.isolation_level.clone()
     }
 
     #[getter]

@@ -116,6 +116,7 @@ def test_commit_and_rollback(provider):
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_autocommit(provider):
     conn = connect(provider, ":memory:", None)
+    assert conn.isolation_level == None
     assert conn.in_transaction == False
     cur = conn.cursor()
     assert conn.in_transaction == False
