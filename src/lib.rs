@@ -42,6 +42,7 @@ fn connect(
                     sync_url,
                     auth_token,
                     Some(ver),
+                    true,
                 );
                 let result = rt.block_on(fut);
                 result.map_err(to_py_err)?
