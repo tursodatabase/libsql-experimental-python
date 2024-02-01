@@ -43,6 +43,7 @@ fn connect(
                     auth_token,
                     Some(ver),
                     true,
+                    None,
                 );
                 let result = rt.block_on(fut);
                 result.map_err(to_py_err)?
@@ -220,7 +221,7 @@ impl Cursor {
         let mut rows = self_.rows.borrow_mut();
         match rows.as_mut() {
             Some(rows) => {
-                let row = rows.next().map_err(to_py_err)?;
+                let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
                 match row {
                     Some(row) => {
                         let row = convert_row(self_.py(), row, rows.column_count())?;
@@ -244,7 +245,7 @@ impl Cursor {
                 // done before iterating.
                 if !*self_.done.borrow() {
                     for _ in 0..size {
-                        let row = rows.next().map_err(to_py_err)?;
+                        let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
                         match row {
                             Some(row) => {
                                 let row = convert_row(self_.py(), row, rows.column_count())?;
@@ -269,7 +270,7 @@ impl Cursor {
             Some(rows) => {
                 let mut elements: Vec<Py<PyAny>> = vec![];
                 loop {
-                    let row = rows.next().map_err(to_py_err)?;
+                    let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
                     match row {
                         Some(row) => {
                             let row = convert_row(self_.py(), row, rows.column_count())?;
