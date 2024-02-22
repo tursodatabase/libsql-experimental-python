@@ -21,6 +21,7 @@ fn is_remote_path(path: &str) -> bool {
 #[pyfunction]
 #[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
 fn connect(
+    py: Python<'_>,
     database: String,
     isolation_level: Option<String>,
     check_same_thread: bool,
@@ -46,7 +47,23 @@ fn connect(
                     None,
                     None,
                 );
-                let result = rt.block_on(fut);
+                println!("connecting");
+                tokio::pin!(fut);
+                let result = rt.block_on(check_signals(py, fut));
+                // let result = rt.block_on(async {
+                //     loop {
+                //         tokio::select! {
+                //             out = &mut fut => {
+                //                 break out;
+                //             }
+
+                //             _ = tokio::time::sleep(std::time::Duration::from_millis(300)) => {
+                //                 py.check_signals().unwrap();
+                //             }
+                //         }
+                //     }
+                // });
+                println!("done connecting");
                 result.map_err(to_py_err)?
             }
             None => libsql_core::Database::open(database).map_err(to_py_err)?,
@@ -62,6 +79,23 @@ fn connect(
         isolation_level,
         autocommit,
     })
+}
+
+async fn check_signals<F, R>(py: Python<'_>, mut fut: std::pin::Pin<&mut F>) -> R
+where
+    F: std::future::Future<Output = R>,
+{
+    loop {
+        tokio::select! {
+            out = &mut fut => {
+                break out;
+            }
+
+            _ = tokio::time::sleep(std::time::Duration::from_millis(300)) => {
+                py.check_signals().unwrap();
+            }
+        }
+    }
 }
 
 #[pyclass]
@@ -91,8 +125,14 @@ impl Connection {
         })
     }
 
-    fn sync(self_: PyRef<'_, Self>) -> PyResult<()> {
-        self_.rt.block_on(self_.db.sync()).map_err(to_py_err)?;
+    fn sync(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<()> {
+        let fut = self_.db.sync();
+        tokio::pin!(fut);
+
+        self_
+            .rt
+            .block_on(check_signals(py, fut))
+            .map_err(to_py_err)?;
         Ok(())
     }
 
@@ -254,11 +294,11 @@ impl Cursor {
                             }
                             None => {
                                 self_.done.replace(true);
-                                break
+                                break;
                             }
                         }
                     }
-                    }
+                }
                 Ok(Some(PyList::new(self_.py(), elements)))
             }
             None => Ok(None),
