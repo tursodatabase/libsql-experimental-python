@@ -47,23 +47,8 @@ fn connect(
                     None,
                     None,
                 );
-                println!("connecting");
                 tokio::pin!(fut);
                 let result = rt.block_on(check_signals(py, fut));
-                // let result = rt.block_on(async {
-                //     loop {
-                //         tokio::select! {
-                //             out = &mut fut => {
-                //                 break out;
-                //             }
-
-                //             _ = tokio::time::sleep(std::time::Duration::from_millis(300)) => {
-                //                 py.check_signals().unwrap();
-                //             }
-                //         }
-                //     }
-                // });
-                println!("done connecting");
                 result.map_err(to_py_err)?
             }
             None => libsql_core::Database::open(database).map_err(to_py_err)?,
@@ -71,29 +56,41 @@ fn connect(
     };
     let autocommit = isolation_level.is_none();
     let conn = db.connect().map_err(to_py_err)?;
-    let conn = Arc::new(conn);
     Ok(Connection {
         db,
-        conn,
+        conn: Arc::new(ConnectionGuard {
+            conn: Some(conn),
+            handle: rt.handle().clone(),
+        }),
         rt,
         isolation_level,
         autocommit,
     })
 }
 
-async fn check_signals<F, R>(py: Python<'_>, mut fut: std::pin::Pin<&mut F>) -> R
-where
-    F: std::future::Future<Output = R>,
-{
-    loop {
-        tokio::select! {
-            out = &mut fut => {
-                break out;
-            }
+// We need to add a drop guard that runs when we finally drop our
+// only reference to libsql_core::Connection. This is because when
+// hrana is enabled it needs access to the tokio api to spawn a close
+// call in the background. So this adds the ability that when drop is called
+// on ConnectionGuard it will drop the connection with a tokio context entered.
+struct ConnectionGuard {
+    conn: Option<libsql_core::Connection>,
+    handle: tokio::runtime::Handle,
+}
 
-            _ = tokio::time::sleep(std::time::Duration::from_millis(300)) => {
-                py.check_signals().unwrap();
-            }
+impl std::ops::Deref for ConnectionGuard {
+    type Target = libsql_core::Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn.as_ref().expect("Connection already dropped")
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        let _enter = self.handle.enter();
+        if let Some(conn) = self.conn.take() {
+            drop(conn);
         }
     }
 }
@@ -101,7 +98,7 @@ where
 #[pyclass]
 pub struct Connection {
     db: libsql_core::Database,
-    conn: Arc<libsql_core::Connection>,
+    conn: Arc<ConnectionGuard>,
     rt: tokio::runtime::Runtime,
     isolation_level: Option<String>,
     autocommit: bool,
@@ -126,7 +123,10 @@ impl Connection {
     }
 
     fn sync(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<()> {
-        let fut = self_.db.sync();
+        let fut = {
+            let _enter = self_.rt.enter();
+            self_.db.sync()
+        };
         tokio::pin!(fut);
 
         self_
@@ -141,7 +141,7 @@ impl Connection {
         if !self_.conn.is_autocommit() {
             self_
                 .rt
-                .block_on(self_.conn.execute("COMMIT", ()))
+                .block_on(async { self_.conn.execute("COMMIT", ()).await })
                 .map_err(to_py_err)?;
         }
         Ok(())
@@ -152,7 +152,7 @@ impl Connection {
         if !self_.conn.is_autocommit() {
             self_
                 .rt
-                .block_on(self_.conn.execute("ROLLBACK", ()))
+                .block_on(async { self_.conn.execute("ROLLBACK", ()).await })
                 .map_err(to_py_err)?;
         }
         Ok(())
@@ -165,7 +165,7 @@ impl Connection {
     ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
         let rt = self_.rt.handle();
-        rt.block_on(execute(&cursor, sql, parameters))?;
+        rt.block_on(async { execute(&cursor, sql, parameters).await })?;
         Ok(cursor)
     }
 
@@ -179,7 +179,7 @@ impl Connection {
             let parameters = parameters.extract::<&PyTuple>()?;
             self_
                 .rt
-                .block_on(execute(&cursor, sql.clone(), Some(parameters)))?;
+                .block_on(async { execute(&cursor, sql.clone(), Some(parameters)).await })?;
         }
         Ok(cursor)
     }
@@ -200,7 +200,7 @@ pub struct Cursor {
     #[pyo3(get, set)]
     arraysize: usize,
     rt: tokio::runtime::Handle,
-    conn: Arc<libsql_core::Connection>,
+    conn: Arc<ConnectionGuard>,
     stmt: RefCell<Option<libsql_core::Statement>>,
     rows: RefCell<Option<libsql_core::Rows>>,
     rowcount: RefCell<i64>,
@@ -218,7 +218,9 @@ impl Cursor {
         sql: String,
         parameters: Option<&PyTuple>,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
-        self_.rt.block_on(execute(&self_, sql, parameters))?;
+        self_
+            .rt
+            .block_on(async { execute(&self_, sql, parameters).await })?;
         Ok(self_)
     }
 
@@ -231,7 +233,7 @@ impl Cursor {
             let parameters = parameters.extract::<&PyTuple>()?;
             self_
                 .rt
-                .block_on(execute(&self_, sql.clone(), Some(parameters)))?;
+                .block_on(async { execute(&self_, sql.clone(), Some(parameters)).await })?;
         }
         Ok(self_)
     }
@@ -286,7 +288,10 @@ impl Cursor {
                 // done before iterating.
                 if !*self_.done.borrow() {
                     for _ in 0..size {
-                        let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
+                        let row = self_
+                            .rt
+                            .block_on(async { rows.next().await })
+                            .map_err(to_py_err)?;
                         match row {
                             Some(row) => {
                                 let row = convert_row(self_.py(), row, rows.column_count())?;
@@ -311,7 +316,10 @@ impl Cursor {
             Some(rows) => {
                 let mut elements: Vec<Py<PyAny>> = vec![];
                 loop {
-                    let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
+                    let row = self_
+                        .rt
+                        .block_on(async { rows.next().await })
+                        .map_err(to_py_err)?;
                     match row {
                         Some(row) => {
                             let row = convert_row(self_.py(), row, rows.column_count())?;
@@ -432,4 +440,21 @@ fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Connection>()?;
     m.add_class::<Cursor>()?;
     Ok(())
+}
+
+async fn check_signals<F, R>(py: Python<'_>, mut fut: std::pin::Pin<&mut F>) -> R
+where
+    F: std::future::Future<Output = R>,
+{
+    loop {
+        tokio::select! {
+            out = &mut fut => {
+                break out;
+            }
+
+            _ = tokio::time::sleep(std::time::Duration::from_millis(300)) => {
+                py.check_signals().unwrap();
+            }
+        }
+    }
 }
