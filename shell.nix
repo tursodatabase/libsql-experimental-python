@@ -5,6 +5,8 @@
     python39
     python39Packages.pip
     python39Packages.virtualenv
+    python39Packages.pytest
+    python39Packages.pyperf
     maturin
   ]);
   runScript = "bash";
