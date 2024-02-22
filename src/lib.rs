@@ -44,6 +44,7 @@ fn connect(
                     Some(ver),
                     true,
                     None,
+                    None,
                 );
                 let result = rt.block_on(fut);
                 result.map_err(to_py_err)?
