@@ -101,6 +101,12 @@ source .env/bin/activate
 pip3 install maturin pyperf pytest
 ```
 
+Or you can use NIX to drop you into a shell with everything installed
+
+```
+nix-shell
+```
+
 Build the development version and use it:
 
 ```
