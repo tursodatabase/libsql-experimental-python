@@ -1,144 +1,49 @@
-# libSQL API for Python
+<p align="center">
+  <a href="https://docs.turso.tech/sdk/ts/quickstart">
+    <img alt="Turso + Python cover" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/567b8fb8-460e-4cb3-a359-097976a6b0a7" width="1000">
+    <h3 align="center">Turso + Python</h3>
+  </a>
+</p>
 
-[![PyPI](https://badge.fury.io/py/libsql-experimental.svg)](https://badge.fury.io/py/libsql-experimental)
+<p align="center">
+  Turso is a SQLite-compatible database built on libSQL.
+</p>
 
-libSQL is an open source, open contribution fork of SQLite. We aim to evolve it to suit many more use cases than SQLite was originally designed for.
+<p align="center">
+  <a href="https://turso.tech"><strong>Turso</strong></a> ·
+  <a href="https://docs.turso.tech/quickstart"><strong>Quickstart</strong></a> ·
+  <a href="/examples"><strong>Examples</strong></a> ·
+  <a href="https://docs.turso.tech"><strong>Docs</strong></a> ·
+  <a href="https://discord.com/invite/4B5D7hYwub"><strong>Discord</strong></a> ·
+  <a href="https://blog.turso.tech/"><strong>Blog &amp; Tutorials</strong></a>
+</p>
 
-This source repository contains libSQL API bindings for Python, which aim to be compatible with the [sqlite3](https://docs.python.org/3/library/sqlite3.html) module.
+<p align="center">
+  <a href="https://pypi.org/project/libsql-experimental">
+    <img src="https://badge.fury.io/py/libsql-experimental.svg" alt="PyPI" title="PyPI" />
+  </a>
+  <a href="https://discord.com/invite/4B5D7hYwub">
+    <img src="https://dcbadge.vercel.app/api/server/4B5D7hYwub?style=flat" alt="discord activity" title="join us on discord" />
+  </a>
+</p>
 
-## Install
-
-You can install the current release _(MacOS and Linux)_:
-
-```
-$ pip install libsql-experimental
-```
+---
 
 ## Documentation
 
-* [API reference](docs/api.md)
+1. [Turso Quickstart](https://docs.turso.tech/quickstart) &mdash; Learn how create and connect your first database.
+2. [SDK Quickstart](https://docs.turso.tech/sdk/python/quickstart) &mdash; Learn how to install and execute queries using the libSQL client.
+3. [SDK Reference](https://docs.turso.tech/sdk/python/reference) &mdash; Dive deeper with the libSQL SDK reference and examples.
 
-## Getting Started
+### What is Turso?
 
-To try out your first libsql program, start the Python interpreter:
+[Turso](https://turso.tech) is a SQLite-compatible database built on [libSQL](https://docs.turso.tech/libsql), the Open Contribution fork of SQLite. It enables scaling to hundreds of thousands of databases per organization and supports replication to any location, including your own servers, for microsecond-latency access.
 
-```shell
-$ python
-```
+Learn more about what you can do with Turso:
 
-and then:
-
-```python
->>> import libsql_experimental as libsql
->>> con = libsql.connect("hello.db")
->>> cur = con.cursor()
->>> cur.execute("CREATE TABLE users (id INTEGER, email TEXT);")
-<builtins.Result object at 0x102dcf8d0>
->>> cur.execute("INSERT INTO users VALUES (1, 'alice@example.org')")
-<builtins.Result object at 0x102dcf4b0>
->>> cur.execute("SELECT * FROM users").fetchone()
-(1, 'alice@example.org')
-```
-
-#### Connecting to a database
-
-```python
-import libsql_experimental as libsql
-
-con = libsql.connect("hello.db")
-cur = con.cursor()
-```
-
-#### Remote database
-
-```python
-import libsql_experimental as libsql
-
-url = os.getenv("LIBSQL_URL")
-auth_token = os.getenv("LIBSQL_AUTH_TOKEN")
-
-con = libsql.connect(database=url, auth_token=auth_token)
-cur = con.cursor()
-```
-
-#### Embedded replica
-
-```python
-import libsql_experimental as libsql
-
-url = os.getenv("LIBSQL_URL")
-auth_token = os.getenv("LIBSQL_AUTH_TOKEN")
-
-con = libsql.connect("hello.db", sync_url=url, auth_token=auth_token)
-con.sync()
-```
-
-#### Creating a table
-
-```python
-cur.execute("CREATE TABLE users (id INTEGER, email TEXT);")
-```
-
-#### Inserting rows into a table
-
-```python
-cur.execute("INSERT INTO users VALUES (1, 'alice@example.org')")
-```
-
-#### Querying rows from a table
-
-```python
-print(cur.execute("SELECT * FROM users").fetchone())
-```
-
-## Developing
-
-Setup the development environment:
-
-```sh
-python3 -m venv .env
-source .env/bin/activate
-pip3 install maturin pyperf pytest
-```
-
-Or you can use NIX to drop you into a shell with everything installed
-
-```
-nix-shell
-```
-
-Build the development version and use it:
-
-```
-maturin develop && python3 example.py
-```
-
-Run the tests:
-
-```sh
-pytest
-```
-
-Run the libSQL benchmarks:
-
-```sh
-python3 perf-libsql.py
-```
-
-Run the SQLite benchmarks for comparison:
-
-```sh
-python3 perf-sqlite3.py
-```
-
-## License
-
-This project is licensed under the [MIT license].
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in libSQL by you, shall be licensed as MIT, without any additional
-terms or conditions.
-
-[MIT license]: https://github.com/libsql/libsql-experimental-python/blob/main/LICENSE.md
+- [Embedded Replicas](https://docs.turso.tech/features/embedded-replicas)
+- [Platform API](https://docs.turso.tech/features/platform-api)
+- [Data Edge](https://docs.turso.tech/features/data-edge)
+- [Branching](https://docs.turso.tech/features/branching)
+- [Point-in-Time Recovery](https://docs.turso.tech/features/point-in-time-recovery)
+- [Scale to Zero](https://docs.turso.tech/features/scale-to-zero)
