@@ -19,7 +19,7 @@ fn is_remote_path(path: &str) -> bool {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, auth_token="", encryption_key=None))]
+#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
 fn connect(
     py: Python<'_>,
     database: String,
@@ -27,6 +27,7 @@ fn connect(
     check_same_thread: bool,
     uri: bool,
     sync_url: Option<String>,
+    sync_interval: Option<f64>,
     auth_token: &str,
     encryption_key: Option<String>,
 ) -> PyResult<Connection> {
@@ -47,6 +48,7 @@ fn connect(
     } else {
         match sync_url {
             Some(sync_url) => {
+                let sync_interval = sync_interval.map(|i| std::time::Duration::from_secs_f64(i));
                 let fut = libsql::Database::open_with_remote_sync_internal(
                     database,
                     sync_url,
@@ -54,7 +56,7 @@ fn connect(
                     Some(ver),
                     true,
                     encryption_config,
-                    None,
+                    sync_interval,
                 );
                 tokio::pin!(fut);
                 let result = rt.block_on(check_signals(py, fut));
