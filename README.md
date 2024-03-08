@@ -14,7 +14,7 @@
   <a href="https://docs.turso.tech/quickstart"><strong>Quickstart</strong></a> ·
   <a href="/examples"><strong>Examples</strong></a> ·
   <a href="https://docs.turso.tech"><strong>Docs</strong></a> ·
-  <a href="https://discord.com/invite/4B5D7hYwub"><strong>Discord</strong></a> ·
+  <a href="https://discord.gg/turso"><strong>Discord</strong></a> ·
   <a href="https://blog.turso.tech/"><strong>Blog &amp; Tutorials</strong></a>
 </p>
 
