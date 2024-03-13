@@ -184,6 +184,20 @@ impl Connection {
         Ok(cursor)
     }
 
+    fn executescript(self_: PyRef<'_, Self>, script: String) -> PyResult<()> {
+        let statements = script.split(';');
+        for statement in statements {
+            let statement = statement.trim();
+            if !statement.is_empty() {
+                let cursor = Connection::cursor(&self_)?;
+                self_
+                    .rt
+                    .block_on(async { execute(&cursor, statement.to_string(), None).await })?;
+            }
+        }
+        Ok(())
+    }
+
     #[getter]
     fn isolation_level(self_: PyRef<'_, Self>) -> Option<String> {
         self_.isolation_level.clone()
