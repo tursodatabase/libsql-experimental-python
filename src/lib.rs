@@ -19,7 +19,7 @@ fn is_remote_path(path: &str) -> bool {
 }
 
 #[pyfunction]
-#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, auth_token=""))]
+#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
 fn connect(
     py: Python<'_>,
     database: String,
@@ -27,31 +27,51 @@ fn connect(
     check_same_thread: bool,
     uri: bool,
     sync_url: Option<String>,
+    sync_interval: Option<f64>,
     auth_token: &str,
+    encryption_key: Option<String>,
 ) -> PyResult<Connection> {
     let ver = env!("CARGO_PKG_VERSION");
     let ver = format!("libsql-python-rpc-{ver}");
     let rt = tokio::runtime::Runtime::new().unwrap();
+    let encryption_config = match encryption_key {
+        Some(key) => {
+            let cipher = libsql::Cipher::default();
+            let encryption_config = libsql::EncryptionConfig::new(cipher, key.into());
+            Some(encryption_config)
+        }
+        None => None,
+    };
     let db = if is_remote_path(&database) {
         let result = libsql::Database::open_remote_internal(database.clone(), auth_token, ver);
         result.map_err(to_py_err)?
     } else {
         match sync_url {
             Some(sync_url) => {
+                let sync_interval = sync_interval.map(|i| std::time::Duration::from_secs_f64(i));
                 let fut = libsql::Database::open_with_remote_sync_internal(
                     database,
                     sync_url,
                     auth_token,
                     Some(ver),
                     true,
-                    None,
-                    None,
+                    encryption_config,
+                    sync_interval,
                 );
                 tokio::pin!(fut);
                 let result = rt.block_on(check_signals(py, fut));
                 result.map_err(to_py_err)?
             }
-            None => libsql_core::Database::open(database).map_err(to_py_err)?,
+            None => {
+                let mut builder = libsql::Builder::new_local(database);
+                if let Some(config) = encryption_config {
+                    builder = builder.encryption_config(config);
+                }
+                let fut = builder.build();
+                tokio::pin!(fut);
+                let result = rt.block_on(check_signals(py, fut));
+                result.map_err(to_py_err)?
+            }
         }
     };
     let autocommit = isolation_level.is_none();
