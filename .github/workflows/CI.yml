@@ -37,7 +37,7 @@ jobs:
           path: dist
 
   macos-x86_64:
-    runs-on: macos-latest
+    runs-on: macos-13
     strategy:
       matrix:
         target: [x86_64]
@@ -59,7 +59,7 @@ jobs:
           path: dist
 
   macos-arm64:
-    runs-on: macos-arm64
+    runs-on: macos-13-xlarge
     strategy:
       matrix:
         target: [aarch64]
