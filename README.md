@@ -1,12 +1,12 @@
 <p align="center">
   <a href="https://docs.turso.tech/sdk/ts/quickstart">
-    <img alt="Turso + Python cover" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/567b8fb8-460e-4cb3-a359-097976a6b0a7" width="1000">
+    <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
     <h3 align="center">Turso + Python</h3>
   </a>
 </p>
 
 <p align="center">
-  Turso is a SQLite-compatible database built on libSQL.
+  SQLite for Production. Powered by <a href="https://turso.tech/libsql">libSQL</a>.
 </p>
 
 <p align="center">
