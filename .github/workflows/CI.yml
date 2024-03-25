@@ -37,7 +37,7 @@ jobs:
           path: dist
 
   macos-x86_64:
-    runs-on: macos-14
+    runs-on: macos-13
     strategy:
       matrix:
         target: [x86_64]
@@ -48,6 +48,9 @@ jobs:
           python-version: '3.10'
       - name: Build wheels
         uses: PyO3/maturin-action@v1
+        env:
+          CXX: clang++
+          CC: clang
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
@@ -59,7 +62,7 @@ jobs:
           path: dist
 
   macos-arm64:
-    runs-on: macos-14-xlarge
+    runs-on: macos-13-xlarge
     strategy:
       matrix:
         target: [aarch64]
@@ -70,6 +73,9 @@ jobs:
         with:
           cmake-version: '3.18.x'
       - uses: actions/setup-python@v4
+        env:
+          CXX: clang++
+          CC: clang
         with:
           python-version: '3.10'
       - name: Build wheels
