@@ -162,7 +162,10 @@ def test_in_transaction(provider):
 @pytest.mark.parametrize("provider", ["libsql-remote", "libsql", "sqlite"])
 def test_fetch_expression(provider):
     dbname = "/tmp/test.db" if provider == "libsql-remote" else ":memory:"
-    conn = connect(provider, dbname)
+    try:
+        conn = connect(provider, dbname)
+    except Exception as e:
+        pytest.skip(str(e))
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS users")
     cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
@@ -173,6 +176,13 @@ def test_fetch_expression(provider):
 
 def connect(provider, database, isolation_level='DEFERRED'):
     if provider == "libsql-remote":
+        from urllib import request
+        try:
+            res = request.urlopen("http://localhost:8080/reset")
+        except Exception as _:
+            raise Exception("libsql-remote server is not running")
+        if res.getcode() != 200:
+            raise Exception("libsql-remote server is not running")
         return libsql_experimental.connect(database, sync_url="http://localhost:8080", auth_token="")
     if provider == "libsql":
         return libsql_experimental.connect(database, isolation_level = isolation_level)
