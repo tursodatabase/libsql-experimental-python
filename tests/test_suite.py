@@ -178,7 +178,7 @@ def connect(provider, database, isolation_level='DEFERRED'):
     if provider == "libsql-remote":
         from urllib import request
         try:
-            res = request.urlopen("http://localhost:8080/reset")
+            res = request.urlopen("http://localhost:8080/v2")
         except Exception as _:
             raise Exception("libsql-remote server is not running")
         if res.getcode() != 200:
