@@ -440,22 +440,19 @@ fn stmt_is_dml(sql: &str) -> bool {
 fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult<&PyTuple> {
     let mut elements: Vec<Py<PyAny>> = vec![];
     for col_idx in 0..column_count {
-        let col_type = row.column_type(col_idx).map_err(to_py_err)?;
-        let value = match col_type {
-            libsql::ValueType::Integer => {
-                let value = row.get::<i32>(col_idx).map_err(to_py_err)?;
+        let libsql_value = row.get_value(col_idx).map_err(to_py_err)?;
+        let value = match libsql_value {
+            libsql_core::Value::Integer(v) => {
+                let value = v as i32;
                 value.into_py(py)
             }
-            libsql::ValueType::Real => {
-                let value = row.get::<f64>(col_idx).map_err(to_py_err)?;
+            libsql_core::Value::Real(v) => v.into_py(py),
+            libsql_core::Value::Text(v) => v.into_py(py),
+            libsql_core::Value::Blob(v) => {
+                let value = v.as_slice();
                 value.into_py(py)
             }
-            libsql::ValueType::Blob => todo!("blobs not supported"),
-            libsql::ValueType::Text => {
-                let value = row.get::<String>(col_idx).map_err(to_py_err)?;
-                value.into_py(py)
-            }
-            libsql::ValueType::Null => py.None(),
+            libsql_core::Value::Null => py.None(),
         };
         elements.push(value);
     }

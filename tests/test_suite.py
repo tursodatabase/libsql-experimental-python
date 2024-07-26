@@ -159,7 +159,31 @@ def test_in_transaction(provider):
     cur.execute("INSERT INTO users VALUES (?, ?)", (2, 'bob@example.com'))
     assert conn.in_transaction == True
 
+@pytest.mark.parametrize("provider", ["libsql-remote", "libsql", "sqlite"])
+def test_fetch_expression(provider):
+    dbname = "/tmp/test.db" if provider == "libsql-remote" else ":memory:"
+    try:
+        conn = connect(provider, dbname)
+    except Exception as e:
+        pytest.skip(str(e))
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS users")
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    cur.execute("INSERT INTO users VALUES (1, 'alice@example.com')")
+    res = cur.execute("SELECT QUOTE(email) FROM users")
+    assert [("'alice@example.com'",)] == res.fetchall()
+
+
 def connect(provider, database, isolation_level='DEFERRED'):
+    if provider == "libsql-remote":
+        from urllib import request
+        try:
+            res = request.urlopen("http://localhost:8080/v2")
+        except Exception as _:
+            raise Exception("libsql-remote server is not running")
+        if res.getcode() != 200:
+            raise Exception("libsql-remote server is not running")
+        return libsql_experimental.connect(database, sync_url="http://localhost:8080", auth_token="")
     if provider == "libsql":
         return libsql_experimental.connect(database, isolation_level = isolation_level)
     if provider == "sqlite":
