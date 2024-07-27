@@ -276,22 +276,27 @@ impl Cursor {
     fn description(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
         let stmt = self_.stmt.borrow();
         let mut elements: Vec<Py<PyAny>> = vec![];
-        for column in stmt.as_ref().unwrap().columns() {
-            let name = column.name();
-            let element = (
-                name,
-                self_.py().None(),
-                self_.py().None(),
-                self_.py().None(),
-                self_.py().None(),
-                self_.py().None(),
-                self_.py().None(),
-            )
-                .to_object(self_.py());
-            elements.push(element);
+        match stmt.as_ref() {
+            Some(stmt) => {
+                for column in stmt.columns() {
+                    let name = column.name();
+                    let element = (
+                        name,
+                        self_.py().None(),
+                        self_.py().None(),
+                        self_.py().None(),
+                        self_.py().None(),
+                        self_.py().None(),
+                        self_.py().None(),
+                    )
+                        .to_object(self_.py());
+                    elements.push(element);
+                }
+                let elements = PyTuple::new(self_.py(), elements);
+                Ok(Some(elements))
+            }
+            None => Ok(None),
         }
-        let elements = PyTuple::new(self_.py(), elements);
-        Ok(Some(elements))
     }
 
     fn fetchone(self_: PyRef<'_, Self>) -> PyResult<Option<&PyTuple>> {
