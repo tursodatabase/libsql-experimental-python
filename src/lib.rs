@@ -448,7 +448,7 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
         let libsql_value = row.get_value(col_idx).map_err(to_py_err)?;
         let value = match libsql_value {
             libsql_core::Value::Integer(v) => {
-                let value = v as i32;
+                let value = v as i64;
                 value.into_py(py)
             }
             libsql_core::Value::Real(v) => v.into_py(py),
