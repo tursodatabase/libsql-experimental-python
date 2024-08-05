@@ -173,6 +173,15 @@ def test_fetch_expression(provider):
     res = cur.execute("SELECT QUOTE(email) FROM users")
     assert [("'alice@example.com'",)] == res.fetchall()
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_int64(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE data (id INTEGER, number INTEGER)")
+    conn.commit()
+    cur.execute("INSERT INTO data VALUES (1, 1099511627776)") # 1 << 40
+    res = cur.execute("SELECT * FROM data")
+    assert [(1,1099511627776)] == res.fetchall()
 
 def connect(provider, database, isolation_level='DEFERRED'):
     if provider == "libsql-remote":
