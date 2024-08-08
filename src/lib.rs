@@ -406,16 +406,17 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
     let params = match parameters {
         Some(parameters) => {
             let mut params = vec![];
-            for parameter in parameters.iter() {
-                let param = match parameter.extract::<i32>() {
-                    Ok(value) => libsql_core::Value::Integer(value as i64),
-                    Err(_) => match parameter.extract::<f64>() {
-                        Ok(value) => libsql_core::Value::Real(value),
-                        Err(_) => match parameter.extract::<&str>() {
-                            Ok(value) => libsql_core::Value::Text(value.to_string()),
-                            Err(_) => todo!(),
-                        },
-                    },
+            for param in parameters.iter() {
+                let param = if let Ok(value) = param.extract::<i32>() {
+                    libsql_core::Value::Integer(value as i64)
+                } else if let Ok(value) = param.extract::<f64>() {
+                    libsql_core::Value::Real(value)
+                } else if let Ok(value) = param.extract::<&str>() {
+                    libsql_core::Value::Text(value.to_string())
+                } else if let Ok(value) = param.extract::<&[u8]>() {
+                    libsql_core::Value::Blob(value.to_vec())
+                } else {
+                    return Err(PyValueError::new_err("Unsupported parameter type"));
                 };
                 params.push(param);
             }
