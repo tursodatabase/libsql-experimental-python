@@ -205,16 +205,9 @@ impl Connection {
     }
 
     fn executescript(self_: PyRef<'_, Self>, script: String) -> PyResult<()> {
-        let statements = script.split(';');
-        for statement in statements {
-            let statement = statement.trim();
-            if !statement.is_empty() {
-                let cursor = Connection::cursor(&self_)?;
-                self_
-                    .rt
-                    .block_on(async { execute(&cursor, statement.to_string(), None).await })?;
-            }
-        }
+        let _ = self_.rt.block_on(async {
+            self_.conn.execute_batch(&script).await
+        }).map_err(to_py_err);
         Ok(())
     }
 
@@ -269,6 +262,16 @@ impl Cursor {
                 .rt
                 .block_on(async { execute(&self_, sql.clone(), Some(parameters)).await })?;
         }
+        Ok(self_)
+    }
+
+    fn executescript<'a>(self_: PyRef<'a, Self>, script: String) -> PyResult<pyo3::PyRef<'a, Self>> {
+        self_
+            .rt
+            .block_on(async {
+                self_.conn.execute_batch(&script).await
+            })
+            .map_err(to_py_err)?;
         Ok(self_)
     }
 

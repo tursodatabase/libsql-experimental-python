@@ -89,6 +89,19 @@ def test_cursor_executemany(provider):
     assert [(1, 'alice@example.com'), (2, 'bob@example.com')] == res.fetchall()
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_cursor_executescript(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.executescript("""
+    CREATE TABLE users (id INTEGER, email TEXT);
+    INSERT INTO users VALUES (1, 'alice@example.org');
+    INSERT INTO users VALUES (2, 'bob@example.org');
+    """)
+    res = cur.execute("SELECT * FROM users")
+    assert (1, 'alice@example.org') == res.fetchone()
+    assert (2, 'bob@example.org') == res.fetchone()
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_lastrowid(provider):
     conn = connect(provider, ":memory:")
     cur = conn.cursor()
