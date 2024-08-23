@@ -789,8 +789,10 @@ version = "0.0.40"
 dependencies = [
  "libsql",
  "pyo3",
+ "pyo3-build-config",
  "tokio",
  "tracing-subscriber",
+ "version_check",
 ]
 
 [[package]]

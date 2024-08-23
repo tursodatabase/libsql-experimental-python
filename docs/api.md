@@ -123,7 +123,7 @@ Unimplemented.
 
 ### autocommit
 
-The driver only supports the legacy `isolation_level`-based transaction mode control and does not implement the `autocommit` property yet (see issue [#30](https://github.com/libsql/libsql-experimental-python/issues/30) for details).
+Starting from Python 3.12, the autocommit property is supported, controlling PEP 249 transaction handling behavior. By default, autocommit is set to LEGACY_TRANSACTION_CONTROL, but this will change to False in a future Python release. For more details, refer to [Connection.autocommit](https://docs.python.org/3/library/sqlite3.html#sqlite3.Connection.autocommit) in the official Python documentation.
 
 ### in_transaction
 

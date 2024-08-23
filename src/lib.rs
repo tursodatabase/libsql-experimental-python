@@ -6,6 +6,8 @@ use pyo3::types::{PyList, PyTuple};
 use std::cell::RefCell;
 use std::sync::Arc;
 
+const LEGACY_TRANSACTION_CONTROL: i32 = -1;
+
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     let msg = match error {
         libsql::Error::SqliteFailure(_, err) => err,
@@ -19,8 +21,72 @@ fn is_remote_path(path: &str) -> bool {
 }
 
 #[pyfunction]
+#[cfg(not(Py_3_12))]
 #[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
 fn connect(
+    py: Python<'_>,
+    database: String,
+    isolation_level: Option<String>,
+    check_same_thread: bool,
+    uri: bool,
+    sync_url: Option<String>,
+    sync_interval: Option<f64>,
+    auth_token: &str,
+    encryption_key: Option<String>,
+) -> PyResult<Connection> {
+    let conn = _connect_core(
+        py,
+        database,
+        isolation_level,
+        check_same_thread,
+        uri,
+        sync_url,
+        sync_interval,
+        auth_token,
+        encryption_key,
+    )?;
+    Ok(conn)
+}
+
+#[pyfunction]
+#[cfg(Py_3_12)]
+#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None, autocommit = LEGACY_TRANSACTION_CONTROL))]
+fn connect(
+    py: Python<'_>,
+    database: String,
+    isolation_level: Option<String>,
+    check_same_thread: bool,
+    uri: bool,
+    sync_url: Option<String>,
+    sync_interval: Option<f64>,
+    auth_token: &str,
+    encryption_key: Option<String>,
+    autocommit: i32,
+) -> PyResult<Connection> {
+    let mut conn = _connect_core(
+        py,
+        database,
+        isolation_level.clone(),
+        check_same_thread,
+        uri,
+        sync_url,
+        sync_interval,
+        auth_token,
+        encryption_key,
+    )?;
+
+    conn.autocommit =
+        if autocommit == LEGACY_TRANSACTION_CONTROL || autocommit == 1 || autocommit == 0 {
+            autocommit
+        } else {
+            return Err(PyValueError::new_err(
+                "autocommit must be True, False, or sqlite3.LEGACY_TRANSACTION_CONTROL",
+            ));
+        };
+    Ok(conn)
+}
+
+fn _connect_core(
     py: Python<'_>,
     database: String,
     isolation_level: Option<String>,
@@ -74,7 +140,8 @@ fn connect(
             }
         }
     };
-    let autocommit = isolation_level.is_none();
+
+    let autocommit = isolation_level.is_none() as i32;
     let conn = db.connect().map_err(to_py_err)?;
     Ok(Connection {
         db,
@@ -121,7 +188,7 @@ pub struct Connection {
     conn: Arc<ConnectionGuard>,
     rt: tokio::runtime::Runtime,
     isolation_level: Option<String>,
-    autocommit: bool,
+    autocommit: i32,
 }
 
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
@@ -138,6 +205,7 @@ impl Connection {
             rows: RefCell::new(None),
             rowcount: RefCell::new(0),
             autocommit: self.autocommit,
+            isolation_level: self.isolation_level.clone(),
             done: RefCell::new(false),
         })
     }
@@ -218,7 +286,29 @@ impl Connection {
 
     #[getter]
     fn in_transaction(self_: PyRef<'_, Self>) -> PyResult<bool> {
+        #[cfg(Py_3_12)]
+        {
+            return Ok(!self_.conn.is_autocommit() || self_.autocommit == 0);
+        }
         Ok(!self_.conn.is_autocommit())
+    }
+
+    #[getter]
+    #[cfg(Py_3_12)]
+    fn get_autocommit(self_: PyRef<'_, Self>) -> PyResult<i32> {
+        Ok(self_.autocommit)
+    }
+
+    #[setter]
+    #[cfg(Py_3_12)]
+    fn set_autocommit(mut self_: PyRefMut<'_, Self>, autocommit: i32) -> PyResult<()> {
+        if autocommit != LEGACY_TRANSACTION_CONTROL && autocommit != 1 && autocommit != 0 {
+            return Err(PyValueError::new_err(
+                "autocommit must be True, False, or sqlite3.LEGACY_TRANSACTION_CONTROL",
+            ));
+        }
+        self_.autocommit = autocommit;
+        Ok(())
     }
 }
 
@@ -232,7 +322,8 @@ pub struct Cursor {
     rows: RefCell<Option<libsql_core::Rows>>,
     rowcount: RefCell<i64>,
     done: RefCell<bool>,
-    autocommit: bool,
+    isolation_level: Option<String>,
+    autocommit: i32,
 }
 
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
@@ -265,12 +356,13 @@ impl Cursor {
         Ok(self_)
     }
 
-    fn executescript<'a>(self_: PyRef<'a, Self>, script: String) -> PyResult<pyo3::PyRef<'a, Self>> {
+    fn executescript<'a>(
+        self_: PyRef<'a, Self>,
+        script: String,
+    ) -> PyResult<pyo3::PyRef<'a, Self>> {
         self_
             .rt
-            .block_on(async {
-                self_.conn.execute_batch(&script).await
-            })
+            .block_on(async { self_.conn.execute_batch(&script).await })
             .map_err(to_py_err)?;
         Ok(self_)
     }
@@ -403,7 +495,8 @@ async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
 
 async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
     let stmt_is_dml = stmt_is_dml(&sql);
-    if !cursor.autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
+    let autocommit = determine_autocommit(cursor);
+    if !autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
         begin_transaction(&cursor.conn).await?;
     }
     let params = match parameters {
@@ -440,6 +533,21 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
     Ok(())
 }
 
+fn determine_autocommit(cursor: &Cursor) -> bool {
+    #[cfg(Py_3_12)]
+    {
+        match cursor.autocommit {
+            LEGACY_TRANSACTION_CONTROL => cursor.isolation_level.is_none(),
+            _ => cursor.autocommit != 0,
+        }
+    }
+
+    #[cfg(not(Py_3_12))]
+    {
+        cursor.isolation_level.is_none()
+    }
+}
+
 fn stmt_is_dml(sql: &str) -> bool {
     let sql = sql.trim();
     let sql = sql.to_uppercase();
@@ -473,6 +581,7 @@ create_exception!(libsql_experimental, Error, pyo3::exceptions::PyException);
 #[pymodule]
 fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
     let _ = tracing_subscriber::fmt::try_init();
+    m.add("LEGACY_TRANSACTION_CONTROL", LEGACY_TRANSACTION_CONTROL)?;
     m.add("paramstyle", "qmark")?;
     m.add("sqlite_version_info", (3, 42, 0))?;
     m.add("Error", py.get_type::<Error>())?;
