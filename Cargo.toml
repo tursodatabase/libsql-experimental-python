@@ -12,3 +12,8 @@ pyo3 = "0.19.0"
 libsql = { git = "https://github.com/tursodatabase/libsql/", rev = "21f405b087b210734367fb1343ed436249c8dc10", features = ["encryption"]  }
 tokio = { version = "1.29.1", features = [ "rt-multi-thread" ] }
 tracing-subscriber = "0.3"
+
+[build-dependencies]
+version_check = "0.9.5"
+# used where logic has to be version/distribution specific, e.g. pypy
+pyo3-build-config = { version = "0.19.0" }
