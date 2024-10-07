@@ -2,11 +2,11 @@
 (pkgs.buildFHSUserEnv {
   name = "pipzone";
   targetPkgs = pkgs: (with pkgs; [
-    python39
-    python39Packages.pip
-    python39Packages.virtualenv
-    python39Packages.pytest
-    python39Packages.pyperf
+    python312
+    python312Packages.pip
+    python312Packages.virtualenv
+    python312Packages.pytest
+    python312Packages.pyperf
     maturin
   ]);
   runScript = "bash";
