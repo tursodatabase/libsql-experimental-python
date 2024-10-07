@@ -3,10 +3,24 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;
+use tokio::runtime::{Handle, Runtime};
 
 const LEGACY_TRANSACTION_CONTROL: i32 = -1;
+
+fn rt() -> Handle {
+    const RT: OnceCell<Runtime> = OnceCell::new();
+
+    RT.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .build()
+            .unwrap()
+    })
+    .handle()
+    .clone()
+}
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     let msg = match error {
@@ -99,7 +113,7 @@ fn _connect_core(
 ) -> PyResult<Connection> {
     let ver = env!("CARGO_PKG_VERSION");
     let ver = format!("libsql-python-rpc-{ver}");
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = rt();
     let encryption_config = match encryption_key {
         Some(key) => {
             let cipher = libsql::Cipher::default();
@@ -147,9 +161,8 @@ fn _connect_core(
         db,
         conn: Arc::new(ConnectionGuard {
             conn: Some(conn),
-            handle: rt.handle().clone(),
+            handle: rt.clone(),
         }),
-        rt,
         isolation_level,
         autocommit,
     })
@@ -186,7 +199,6 @@ impl Drop for ConnectionGuard {
 pub struct Connection {
     db: libsql_core::Database,
     conn: Arc<ConnectionGuard>,
-    rt: tokio::runtime::Runtime,
     isolation_level: Option<String>,
     autocommit: i32,
 }
@@ -199,7 +211,6 @@ impl Connection {
     fn cursor(&self) -> PyResult<Cursor> {
         Ok(Cursor {
             arraysize: 1,
-            rt: self.rt.handle().clone(),
             conn: self.conn.clone(),
             stmt: RefCell::new(None),
             rows: RefCell::new(None),
@@ -212,24 +223,19 @@ impl Connection {
 
     fn sync(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<()> {
         let fut = {
-            let _enter = self_.rt.enter();
+            let _enter = rt().enter();
             self_.db.sync()
         };
         tokio::pin!(fut);
 
-        self_
-            .rt
-            .block_on(check_signals(py, fut))
-            .map_err(to_py_err)?;
+        rt().block_on(check_signals(py, fut)).map_err(to_py_err)?;
         Ok(())
     }
 
     fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_
-                .rt
-                .block_on(async { self_.conn.execute("COMMIT", ()).await })
+            rt().block_on(async { self_.conn.execute("COMMIT", ()).await })
                 .map_err(to_py_err)?;
         }
         Ok(())
@@ -238,9 +244,7 @@ impl Connection {
     fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
         if !self_.conn.is_autocommit() {
-            self_
-                .rt
-                .block_on(async { self_.conn.execute("ROLLBACK", ()).await })
+            rt().block_on(async { self_.conn.execute("ROLLBACK", ()).await })
                 .map_err(to_py_err)?;
         }
         Ok(())
@@ -252,8 +256,7 @@ impl Connection {
         parameters: Option<&PyTuple>,
     ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
-        let rt = self_.rt.handle();
-        rt.block_on(async { execute(&cursor, sql, parameters).await })?;
+        rt().block_on(async { execute(&cursor, sql, parameters).await })?;
         Ok(cursor)
     }
 
@@ -265,17 +268,15 @@ impl Connection {
         let cursor = Connection::cursor(&self_)?;
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            self_
-                .rt
-                .block_on(async { execute(&cursor, sql.clone(), Some(parameters)).await })?;
+            rt().block_on(async { execute(&cursor, sql.clone(), Some(parameters)).await })?;
         }
         Ok(cursor)
     }
 
     fn executescript(self_: PyRef<'_, Self>, script: String) -> PyResult<()> {
-        let _ = self_.rt.block_on(async {
-            self_.conn.execute_batch(&script).await
-        }).map_err(to_py_err);
+        let _ = rt()
+            .block_on(async { self_.conn.execute_batch(&script).await })
+            .map_err(to_py_err);
         Ok(())
     }
 
@@ -316,7 +317,6 @@ impl Connection {
 pub struct Cursor {
     #[pyo3(get, set)]
     arraysize: usize,
-    rt: tokio::runtime::Handle,
     conn: Arc<ConnectionGuard>,
     stmt: RefCell<Option<libsql_core::Statement>>,
     rows: RefCell<Option<libsql_core::Rows>>,
@@ -336,9 +336,7 @@ impl Cursor {
         sql: String,
         parameters: Option<&PyTuple>,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
-        self_
-            .rt
-            .block_on(async { execute(&self_, sql, parameters).await })?;
+        rt().block_on(async { execute(&self_, sql, parameters).await })?;
         Ok(self_)
     }
 
@@ -349,9 +347,7 @@ impl Cursor {
     ) -> PyResult<pyo3::PyRef<'a, Cursor>> {
         for parameters in parameters.unwrap().iter() {
             let parameters = parameters.extract::<&PyTuple>()?;
-            self_
-                .rt
-                .block_on(async { execute(&self_, sql.clone(), Some(parameters)).await })?;
+            rt().block_on(async { execute(&self_, sql.clone(), Some(parameters)).await })?;
         }
         Ok(self_)
     }
@@ -360,9 +356,7 @@ impl Cursor {
         self_: PyRef<'a, Self>,
         script: String,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
-        self_
-            .rt
-            .block_on(async { self_.conn.execute_batch(&script).await })
+        rt().block_on(async { self_.conn.execute_batch(&script).await })
             .map_err(to_py_err)?;
         Ok(self_)
     }
@@ -398,7 +392,7 @@ impl Cursor {
         let mut rows = self_.rows.borrow_mut();
         match rows.as_mut() {
             Some(rows) => {
-                let row = self_.rt.block_on(rows.next()).map_err(to_py_err)?;
+                let row = rt().block_on(rows.next()).map_err(to_py_err)?;
                 match row {
                     Some(row) => {
                         let row = convert_row(self_.py(), row, rows.column_count())?;
@@ -422,8 +416,7 @@ impl Cursor {
                 // done before iterating.
                 if !*self_.done.borrow() {
                     for _ in 0..size {
-                        let row = self_
-                            .rt
+                        let row = rt()
                             .block_on(async { rows.next().await })
                             .map_err(to_py_err)?;
                         match row {
@@ -450,8 +443,7 @@ impl Cursor {
             Some(rows) => {
                 let mut elements: Vec<Py<PyAny>> = vec![];
                 loop {
-                    let row = self_
-                        .rt
+                    let row = rt()
                         .block_on(async { rows.next().await })
                         .map_err(to_py_err)?;
                     match row {
