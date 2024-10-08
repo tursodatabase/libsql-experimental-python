@@ -4,13 +4,13 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::cell::{OnceCell, RefCell};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::runtime::{Handle, Runtime};
 
 const LEGACY_TRANSACTION_CONTROL: i32 = -1;
 
 fn rt() -> Handle {
-    const RT: OnceCell<Runtime> = OnceCell::new();
+    static RT: OnceLock<Runtime> = OnceLock::new();
 
     RT.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
