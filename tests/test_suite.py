@@ -244,7 +244,7 @@ def test_none_param(provider):
     cur = conn.cursor()
     cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
     cur.execute("INSERT INTO users VALUES (?, ?)", (1, None))
-    cur.execute("INSERT INTO users VALUES (?, ?)", (1, "alice@example.com"))
+    cur.execute("INSERT INTO users VALUES (?, ?)", (2, "alice@example.com"))
     res = cur.execute("SELECT * FROM users ORDER BY id")
     results = res.fetchall()
     assert results[0] == (1, None)
