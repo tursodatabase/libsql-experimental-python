@@ -238,6 +238,7 @@ def test_params(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_none_param(provider):
     conn = connect(provider, ":memory:")
     cur = conn.cursor()
