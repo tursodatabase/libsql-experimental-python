@@ -496,7 +496,9 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         Some(parameters) => {
             let mut params = vec![];
             for param in parameters.iter() {
-                let param = if let Ok(value) = param.extract::<i32>() {
+                let param = if param.is_none() {
+                    libsql_core::Value::Null
+                } else if let Ok(value) = param.extract::<i32>() {
                     libsql_core::Value::Integer(value as i64)
                 } else if let Ok(value) = param.extract::<f64>() {
                     libsql_core::Value::Real(value)
