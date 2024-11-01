@@ -238,6 +238,17 @@ def test_params(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_none_param(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    cur.execute("INSERT INTO users VALUES (?, ?)", (1, None))
+    cur.execute("INSERT INTO users VALUES (?, ?)", (2, "alice@example.com"))
+    res = cur.execute("SELECT * FROM users ORDER BY id")
+    results = res.fetchall()
+    assert results[0] == (1, None)
+    assert results[1] == (2, "alice@example.com")
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_fetchmany(provider):
