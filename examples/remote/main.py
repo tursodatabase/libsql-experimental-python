@@ -14,5 +14,6 @@ conn.execute("INSERT INTO users VALUES ('first@example.com');")
 conn.execute("INSERT INTO users VALUES ('second@example.com');")
 conn.execute("INSERT INTO users VALUES ('third@example.com');")
 
+conn.commit()
 
 print(conn.execute("select * from users").fetchall())
