@@ -3,7 +3,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 use tokio::runtime::{Handle, Runtime};
 

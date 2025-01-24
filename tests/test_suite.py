@@ -238,6 +238,7 @@ def test_params(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
 
+
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_none_param(provider):
     conn = connect(provider, ":memory:")
@@ -249,6 +250,7 @@ def test_none_param(provider):
     results = res.fetchall()
     assert results[0] == (1, None)
     assert results[1] == (2, "alice@example.com")
+
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_fetchmany(provider):
@@ -271,6 +273,28 @@ def test_in_transaction(provider):
     cur.execute("INSERT INTO users VALUES (?, ?)", (1, "alice@example.com"))
     cur.execute("INSERT INTO users VALUES (?, ?)", (2, "bob@example.com"))
     assert conn.in_transaction == True
+
+
+@pytest.mark.parametrize("provider", ["libsql"])
+def test_vector_count_test(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("""
+     CREATE TABLE vectors
+     (
+         vector_id INTEGER PRIMARY KEY,
+         vector F32_BLOB(4)
+     )""")
+    cur.execute("CREATE INDEX vector_idx ON vectors(libsql_vector_idx(vector))")
+    conn.executemany(
+        """
+    INSERT INTO vectors
+    values (?, ?)
+    """,
+        [(1, "[1, 2, 3, 4]")],
+    )
+
+    assert cur.execute("SELECT count(*) FROM vectors").fetchall() == [(1,)]
 
 
 @pytest.mark.parametrize("provider", ["libsql-remote", "libsql", "sqlite"])
