@@ -1,0 +1,87 @@
+name: Build Windows Wheel
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheel:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        python-version: [ "3.12", "3.11", "3.10" ]
+
+    steps:
+      - name: Checkout repository code
+        # zh: 检出仓库代码
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        # zh: 设置 Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Verify Python version
+        # zh: 验证 Python 版本
+        run: python --version
+
+      - name: Set up Rust
+        # zh: 设置 Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Verify Rust version
+        # zh: 验证 Rust 版本
+        run: rustc --version
+
+      - name: Install dependencies
+        # zh: 安装依赖
+        run: |
+          python -m pip install --upgrade pip setuptools wheel Cython build
+      #          python -m pip install -r requirements.txt  # zh: 根据项目实际需求调整
+
+      - name: Build Wheel
+        # zh: 构建 Wheel
+        run: python -m build --wheel
+
+      - name: Find and upload Wheel file
+        # zh: 查找并上传 Wheel 文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-wheel-${{ matrix.python-version }}
+          path: |
+            dist/*.whl
+
+#      - name: Publish to PyPI
+#        # zh: 发布到 PyPI
+#        uses: PyO3/maturin-action@v1
+#        if: startsWith(github.ref, 'refs/tags/')
+#        with:
+#          command: upload
+#          args: --skip-existing *
+#        env:
+#          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+#      - name: Upload Wheel to GitHub Releases
+#        # zh: 上传 Wheel 到 GitHub Releases
+#        if: startsWith(github.ref, 'refs/tags/')
+#        uses: actions/upload-release-asset@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          upload_url: ${{ github.event.release.upload_url }}
+#          asset_path: ./dist/*.whl
+#          asset_name: your_package_name-${{ matrix.python-version }}.whl  # zh: 请替换为实际的 wheel 文件名
+#          asset_content_type: application/octet-stream
