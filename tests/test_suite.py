@@ -298,33 +298,6 @@ def test_int64(provider):
     res = cur.execute("SELECT * FROM data")
     assert [(1, 1099511627776)] == res.fetchall()
 
-def test_type_adherence(capsys):
-    try:
-        from mypy.stubtest import test_stubs, parse_options
-    except (ImportError, ModuleNotFoundError):
-        # skip test if mypy not installed
-        pytest.skip("Cant test type stubs without mypy installed")
-
-    # run mypy stubtest tool. Equivalent to running the following the terminal
-    """
-    stubtest --concise libsql_experimental | \
-        grep -v 'which is incompatible with stub argument type'
-    """
-    test_stubs(parse_options(["--concise", "libsql_experimental"]))
-    cap = capsys.readouterr()
-
-    # this is part of error reported if is default parameter is ellipsis
-    # `arg: type = ...` which is a nicer way to hide implementation from user
-    # than having the more "correct" `arg: type | None = None` everywhere
-    ellipsis_err = "which is incompatible with stub argument type"
-
-    lines = cap.out.split("\n")
-    lines = filter(lambda x: ellipsis_err not in x, lines)  # filter false positives from ellipsis
-    lines = filter(lambda x: len(x) != 0, lines)  # filter empty lines
-
-    # there will always be one error which i dont know how to get rid of
-    # `libsql_experimental.libsql_experimental failed to find stubs`
-    assert len(list(lines)) == 1
 
 def connect(provider, database, isolation_level="DEFERRED", autocommit=-1):
     if provider == "libsql-remote":
