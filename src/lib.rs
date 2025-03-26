@@ -130,15 +130,15 @@ fn _connect_core(
         match sync_url {
             Some(sync_url) => {
                 let sync_interval = sync_interval.map(|i| std::time::Duration::from_secs_f64(i));
-                let fut = libsql::Database::open_with_remote_sync_internal(
-                    database,
-                    sync_url,
-                    auth_token,
-                    Some(ver),
-                    true,
-                    encryption_config,
-                    sync_interval,
-                );
+                let mut builder =
+                    libsql::Builder::new_remote_replica(database, sync_url, auth_token.to_string());
+                if let Some(encryption_config) = encryption_config {
+                    builder = builder.encryption_config(encryption_config);
+                }
+                if let Some(sync_interval) = sync_interval {
+                    builder = builder.sync_interval(sync_interval);
+                }
+                let fut = builder.build();
                 tokio::pin!(fut);
                 let result = rt.block_on(check_signals(py, fut));
                 result.map_err(to_py_err)?
