@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "libsql-experimental"
+version = "0.0.41"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
