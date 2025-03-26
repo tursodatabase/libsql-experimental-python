@@ -31,9 +31,9 @@ jobs:
           sccache: 'true'
           manylinux: auto
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.target }}
           path: dist
 
   macos-x86_64:
@@ -56,9 +56,9 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-x86_64
           path: dist
 
   macos-arm64:
@@ -81,9 +81,9 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-arm64
           path: dist
 
   sdist:
@@ -96,9 +96,9 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: sdist
           path: dist
 
   release:
@@ -107,9 +107,15 @@ jobs:
     if: "startsWith(github.ref, 'refs/tags/')"
     needs: [linux, macos-arm64, macos-x86_64, sdist]
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
@@ -117,3 +123,4 @@ jobs:
         with:
           command: upload
           args: --skip-existing *
+
