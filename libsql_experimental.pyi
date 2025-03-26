@@ -45,6 +45,9 @@ class Connection:
     @property
     def in_transaction(self) -> bool: ...
 
+    @property
+    def autocommit(self) -> int: ...
+
     def commit(self) -> None: ...
     def cursor(self) -> Cursor: ...
     def sync(self) -> None: ...
@@ -61,5 +64,6 @@ def connect(database: str,
             sync_url: str = ...,
             sync_interval: float = ...,
             auth_token: str = ...,
-            encryption_key: str = ...) -> Connection:
+            encryption_key: str = ...,
+            autocommit: int = ...) -> Connection:
     """Open a new libSQL connection, return a Connection object."""
