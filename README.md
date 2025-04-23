@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://docs.turso.tech/sdk/ts/quickstart">
+  <a href="https://docs.turso.tech/sdk/python/quickstart">
     <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
     <h3 align="center">Turso + Python (experimental)</h3>
   </a>
