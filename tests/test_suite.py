@@ -7,6 +7,11 @@ import pytest
 
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_connection_close(provider):
+    conn = connect(provider, ":memory:")
+    conn.close()
+
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_execute(provider):
     conn = connect(provider, ":memory:")
     conn.execute("CREATE TABLE users (id INTEGER, email TEXT)")
@@ -24,6 +29,18 @@ def test_cursor_execute(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_cursor_close(provider):
+    conn = connect(provider, ":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE users (id INTEGER, email TEXT)")
+    cur.execute("INSERT INTO users VALUES (1, 'alice@example.com')")
+    cur.execute("INSERT INTO users VALUES (2, 'bob@example.com')")
+    res = cur.execute("SELECT * FROM users")
+    assert [(1, "alice@example.com"), (2, "bob@example.com")] == res.fetchall()
+    cur.close()
+    with pytest.raises(Exception):
+        cur.execute("SELECT * FROM users")
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_executemany(provider):

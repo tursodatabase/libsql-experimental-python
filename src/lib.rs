@@ -160,10 +160,10 @@ fn _connect_core(
     let conn = db.connect().map_err(to_py_err)?;
     Ok(Connection {
         db,
-        conn: Arc::new(ConnectionGuard {
+        conn: RefCell::new(Some(Arc::new(ConnectionGuard {
             conn: Some(conn),
             handle: rt.clone(),
-        }),
+        }))),
         isolation_level,
         autocommit,
     })
@@ -199,7 +199,7 @@ impl Drop for ConnectionGuard {
 #[pyclass]
 pub struct Connection {
     db: libsql_core::Database,
-    conn: Arc<ConnectionGuard>,
+    conn: RefCell<Option<Arc<ConnectionGuard>>>,
     isolation_level: Option<String>,
     autocommit: i32,
 }
@@ -209,10 +209,15 @@ unsafe impl Send for Connection {}
 
 #[pymethods]
 impl Connection {
+    fn close(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<()> {
+        self_.conn.replace(None);
+        Ok(())
+    }
+
     fn cursor(&self) -> PyResult<Cursor> {
         Ok(Cursor {
             arraysize: 1,
-            conn: self.conn.clone(),
+            conn: RefCell::new(Some(self.conn.borrow().as_ref().unwrap().clone())),
             stmt: RefCell::new(None),
             rows: RefCell::new(None),
             rowcount: RefCell::new(0),
@@ -235,18 +240,34 @@ impl Connection {
 
     fn commit(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
-        if !self_.conn.is_autocommit() {
-            rt().block_on(async { self_.conn.execute("COMMIT", ()).await })
-                .map_err(to_py_err)?;
+        if !self_.conn.borrow().as_ref().unwrap().is_autocommit() {
+            rt().block_on(async {
+                self_
+                    .conn
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .execute("COMMIT", ())
+                    .await
+            })
+            .map_err(to_py_err)?;
         }
         Ok(())
     }
 
     fn rollback(self_: PyRef<'_, Self>) -> PyResult<()> {
         // TODO: Switch to libSQL transaction API
-        if !self_.conn.is_autocommit() {
-            rt().block_on(async { self_.conn.execute("ROLLBACK", ()).await })
-                .map_err(to_py_err)?;
+        if !self_.conn.borrow().as_ref().unwrap().is_autocommit() {
+            rt().block_on(async {
+                self_
+                    .conn
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .execute("ROLLBACK", ())
+                    .await
+            })
+            .map_err(to_py_err)?;
         }
         Ok(())
     }
@@ -276,7 +297,15 @@ impl Connection {
 
     fn executescript(self_: PyRef<'_, Self>, script: String) -> PyResult<()> {
         let _ = rt()
-            .block_on(async { self_.conn.execute_batch(&script).await })
+            .block_on(async {
+                self_
+                    .conn
+                    .borrow()
+                    .as_ref()
+                    .unwrap()
+                    .execute_batch(&script)
+                    .await
+            })
             .map_err(to_py_err);
         Ok(())
     }
@@ -290,9 +319,11 @@ impl Connection {
     fn in_transaction(self_: PyRef<'_, Self>) -> PyResult<bool> {
         #[cfg(Py_3_12)]
         {
-            return Ok(!self_.conn.is_autocommit() || self_.autocommit == 0);
+            return Ok(
+                !self_.conn.borrow().as_ref().unwrap().is_autocommit() || self_.autocommit == 0
+            );
         }
-        Ok(!self_.conn.is_autocommit())
+        Ok(!self_.conn.borrow().as_ref().unwrap().is_autocommit())
     }
 
     #[getter]
@@ -318,7 +349,7 @@ impl Connection {
 pub struct Cursor {
     #[pyo3(get, set)]
     arraysize: usize,
-    conn: Arc<ConnectionGuard>,
+    conn: RefCell<Option<Arc<ConnectionGuard>>>,
     stmt: RefCell<Option<libsql_core::Statement>>,
     rows: RefCell<Option<libsql_core::Rows>>,
     rowcount: RefCell<i64>,
@@ -332,6 +363,8 @@ unsafe impl Send for Cursor {}
 
 impl Drop for Cursor {
     fn drop(&mut self) {
+        let _enter = rt().enter();
+        self.conn.replace(None);
         self.stmt.replace(None);
         self.rows.replace(None);
     }
@@ -342,6 +375,7 @@ impl Cursor {
     fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
         rt().block_on(async {
             let cursor: &Cursor = &self_;
+            cursor.conn.replace(None);
             cursor.stmt.replace(None);
             cursor.rows.replace(None);
         });
@@ -373,8 +407,16 @@ impl Cursor {
         self_: PyRef<'a, Self>,
         script: String,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
-        rt().block_on(async { self_.conn.execute_batch(&script).await })
-            .map_err(to_py_err)?;
+        rt().block_on(async {
+            self_
+                .conn
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .execute_batch(&script)
+                .await
+        })
+        .map_err(to_py_err)?;
         Ok(self_)
     }
 
@@ -481,7 +523,9 @@ impl Cursor {
     fn lastrowid(self_: PyRef<'_, Self>) -> PyResult<Option<i64>> {
         let stmt = self_.stmt.borrow();
         match stmt.as_ref() {
-            Some(_) => Ok(Some(self_.conn.last_insert_rowid())),
+            Some(_) => Ok(Some(
+                self_.conn.borrow().as_ref().unwrap().last_insert_rowid(),
+            )),
             None => Ok(None),
         }
     }
@@ -498,10 +542,13 @@ async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
 }
 
 async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
+    if cursor.conn.borrow().as_ref().is_none() {
+        return Err(PyValueError::new_err("Connection already closed"));
+    }
     let stmt_is_dml = stmt_is_dml(&sql);
     let autocommit = determine_autocommit(cursor);
-    if !autocommit && stmt_is_dml && cursor.conn.is_autocommit() {
-        begin_transaction(&cursor.conn).await?;
+    if !autocommit && stmt_is_dml && cursor.conn.borrow().as_ref().unwrap().is_autocommit() {
+        begin_transaction(&cursor.conn.borrow().as_ref().unwrap()).await?;
     }
     let params = match parameters {
         Some(parameters) => {
@@ -526,11 +573,18 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         }
         None => libsql_core::params::Params::None,
     };
-    let mut stmt = cursor.conn.prepare(&sql).await.map_err(to_py_err)?;
+    let mut stmt = cursor
+        .conn
+        .borrow()
+        .as_ref()
+        .unwrap()
+        .prepare(&sql)
+        .await
+        .map_err(to_py_err)?;
     let rows = stmt.query(params).await.map_err(to_py_err)?;
     if stmt_is_dml {
         let mut rowcount = cursor.rowcount.borrow_mut();
-        *rowcount += cursor.conn.changes() as i64;
+        *rowcount += cursor.conn.borrow().as_ref().unwrap().changes() as i64;
     } else {
         cursor.rowcount.replace(-1);
     }
