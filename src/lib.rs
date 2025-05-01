@@ -330,8 +330,24 @@ pub struct Cursor {
 // SAFETY: The libsql crate guarantees that `Connection` is thread-safe.
 unsafe impl Send for Cursor {}
 
+impl Drop for Cursor {
+    fn drop(&mut self) {
+        self.stmt.replace(None);
+        self.rows.replace(None);
+    }
+}
+
 #[pymethods]
 impl Cursor {
+    fn close(self_: PyRef<'_, Self>) -> PyResult<()> {
+        rt().block_on(async {
+            let cursor: &Cursor = &self_;
+            cursor.stmt.replace(None);
+            cursor.rows.replace(None);
+        });
+        Ok(())
+    }
+
     fn execute<'a>(
         self_: PyRef<'a, Self>,
         sql: String,
@@ -473,11 +489,6 @@ impl Cursor {
     #[getter]
     fn rowcount(self_: PyRef<'_, Self>) -> PyResult<i64> {
         Ok(*self_.rowcount.borrow())
-    }
-
-    fn close(_self: PyRef<'_, Self>) -> PyResult<()> {
-        // TODO
-        Ok(())
     }
 }
 
