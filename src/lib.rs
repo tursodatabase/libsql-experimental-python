@@ -587,6 +587,7 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         cursor.rows.replace(Some(rows));
     } else {
         stmt.execute(params).await.map_err(to_py_err)?;
+        cursor.rows.replace(None);
     }
 
     let mut rowcount = cursor.rowcount.borrow_mut();
