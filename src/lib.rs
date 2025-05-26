@@ -581,15 +581,19 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
         .prepare(&sql)
         .await
         .map_err(to_py_err)?;
-    let rows = stmt.query(params).await.map_err(to_py_err)?;
-    if stmt_is_dml {
-        let mut rowcount = cursor.rowcount.borrow_mut();
-        *rowcount += cursor.conn.borrow().as_ref().unwrap().changes() as i64;
+
+    if stmt.columns().iter().len() > 0 {
+        let rows = stmt.query(params).await.map_err(to_py_err)?;
+        cursor.rows.replace(Some(rows));
     } else {
-        cursor.rowcount.replace(-1);
+        stmt.execute(params).await.map_err(to_py_err)?;
+        cursor.rows.replace(None);
     }
+
+    let mut rowcount = cursor.rowcount.borrow_mut();
+    *rowcount += cursor.conn.borrow().as_ref().unwrap().changes() as i64;
+
     cursor.stmt.replace(Some(stmt));
-    cursor.rows.replace(Some(rows));
     Ok(())
 }
 
