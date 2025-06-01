@@ -6,7 +6,7 @@ conn.execute(
     "CREATE TABLE movies (title TEXT, year INT, embedding F32_BLOB(3))")
 conn.execute("CREATE INDEX movies_idx ON movies (libsql_vector_idx(embedding))")
 
-conn.execute(""""
+conn.execute("""
   INSERT INTO movies (title, year, embedding) VALUES
     ('Napoleon', 2023, vector('[1,2,3]')),
     ('Black Hawk Down', 2001, vector('[10,11,12]')),
@@ -20,4 +20,4 @@ cur = conn.execute("""
   JOIN movies ON movies.rowid = id
 """)
 
-print(cur.fetchal())
+print(cur.fetchall())

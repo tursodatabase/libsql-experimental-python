@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://docs.turso.tech/sdk/ts/quickstart">
+  <a href="https://docs.turso.tech/sdk/python/quickstart">
     <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
     <h3 align="center">Turso + Python (experimental)</h3>
   </a>
@@ -45,7 +45,5 @@ Learn more about what you can do with Turso:
 
 - [Embedded Replicas](https://docs.turso.tech/features/embedded-replicas)
 - [Platform API](https://docs.turso.tech/features/platform-api)
-- [Data Edge](https://docs.turso.tech/features/data-edge)
 - [Branching](https://docs.turso.tech/features/branching)
 - [Point-in-Time Recovery](https://docs.turso.tech/features/point-in-time-recovery)
-- [Scale to Zero](https://docs.turso.tech/features/scale-to-zero)
