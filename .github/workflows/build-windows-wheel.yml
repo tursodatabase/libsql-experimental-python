@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-wheel:
@@ -18,12 +18,12 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [ "3.12", "3.11", "3.10" ]
+        python-version: [ "3.13" ]
 
     steps:
       - name: Checkout repository code
         # zh: 检出仓库代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         # zh: 设置 Python ${{ matrix.python-version }}
@@ -74,14 +74,19 @@ jobs:
 #        env:
 #          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-#      - name: Upload Wheel to GitHub Releases
-#        # zh: 上传 Wheel 到 GitHub Releases
-#        if: startsWith(github.ref, 'refs/tags/')
-#        uses: actions/upload-release-asset@v1
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          upload_url: ${{ github.event.release.upload_url }}
-#          asset_path: ./dist/*.whl
-#          asset_name: your_package_name-${{ matrix.python-version }}.whl  # zh: 请替换为实际的 wheel 文件名
-#          asset_content_type: application/octet-stream
+      - name: Upload Wheel to GitHub Releases
+        # zh: 上传 Wheel 到 GitHub Releases
+        # if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+           token: ${{ secrets.CUSTOM_GITHUB_TOKEN }}
+           tag_name: released
+           name: latest-whl
+           draft: false
+           prerelease: true
+           make_latest: true
+           generate_release_notes: true
+           # upload_url: ${{ github.event.release.upload_url }}
+           files: ${{ github.workspace }}/dist/*.whl
+           # asset_name: your_package_name-${{ matrix.python-version }}.whl  # zh: 请替换为实际的 wheel 文件名
+           # asset_content_type: application/octet-stream
