@@ -18,7 +18,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [ "3.13" ]
+        python-version: [ "3.13", "3.12" ]
 
     steps:
       - name: Checkout repository code
@@ -80,6 +80,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
            token: ${{ secrets.GITHUB_TOKEN }}
+           overwrite: true
            tag_name: released
            name: latest-whl
            draft: false
