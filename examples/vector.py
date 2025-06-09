@@ -1,4 +1,4 @@
-import libsql_experimental as libsql
+import libsql
 
 conn = libsql.connect("vector.db")
 

@@ -3,7 +3,7 @@ requires = ["maturin>=1.1,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "libsql-experimental"
+name = "libsql"
 version = "0.0.55"
 requires-python = ">=3.7"
 classifiers = [

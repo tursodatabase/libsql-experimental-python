@@ -1,4 +1,3 @@
-use ::libsql as libsql_core;
 use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -23,7 +22,7 @@ fn rt() -> Handle {
     .clone()
 }
 
-fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
+fn to_py_err(error: libsql::errors::Error) -> PyErr {
     let msg = match error {
         libsql::Error::SqliteFailure(_, err) => err,
         _ => error.to_string(),
@@ -170,17 +169,17 @@ fn _connect_core(
 }
 
 // We need to add a drop guard that runs when we finally drop our
-// only reference to libsql_core::Connection. This is because when
+// only reference to libsql::Connection. This is because when
 // hrana is enabled it needs access to the tokio api to spawn a close
 // call in the background. So this adds the ability that when drop is called
 // on ConnectionGuard it will drop the connection with a tokio context entered.
 struct ConnectionGuard {
-    conn: Option<libsql_core::Connection>,
+    conn: Option<libsql::Connection>,
     handle: tokio::runtime::Handle,
 }
 
 impl std::ops::Deref for ConnectionGuard {
-    type Target = libsql_core::Connection;
+    type Target = libsql::Connection;
 
     fn deref(&self) -> &Self::Target {
         &self.conn.as_ref().expect("Connection already dropped")
@@ -198,7 +197,7 @@ impl Drop for ConnectionGuard {
 
 #[pyclass]
 pub struct Connection {
-    db: libsql_core::Database,
+    db: libsql::Database,
     conn: RefCell<Option<Arc<ConnectionGuard>>>,
     isolation_level: Option<String>,
     autocommit: i32,
@@ -350,8 +349,8 @@ pub struct Cursor {
     #[pyo3(get, set)]
     arraysize: usize,
     conn: RefCell<Option<Arc<ConnectionGuard>>>,
-    stmt: RefCell<Option<libsql_core::Statement>>,
-    rows: RefCell<Option<libsql_core::Rows>>,
+    stmt: RefCell<Option<libsql::Statement>>,
+    rows: RefCell<Option<libsql::Rows>>,
     rowcount: RefCell<i64>,
     done: RefCell<bool>,
     isolation_level: Option<String>,
@@ -536,7 +535,7 @@ impl Cursor {
     }
 }
 
-async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
+async fn begin_transaction(conn: &libsql::Connection) -> PyResult<()> {
     conn.execute("BEGIN", ()).await.map_err(to_py_err)?;
     Ok(())
 }
@@ -555,23 +554,23 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
             let mut params = vec![];
             for param in parameters.iter() {
                 let param = if param.is_none() {
-                    libsql_core::Value::Null
+                    libsql::Value::Null
                 } else if let Ok(value) = param.extract::<i32>() {
-                    libsql_core::Value::Integer(value as i64)
+                    libsql::Value::Integer(value as i64)
                 } else if let Ok(value) = param.extract::<f64>() {
-                    libsql_core::Value::Real(value)
+                    libsql::Value::Real(value)
                 } else if let Ok(value) = param.extract::<&str>() {
-                    libsql_core::Value::Text(value.to_string())
+                    libsql::Value::Text(value.to_string())
                 } else if let Ok(value) = param.extract::<&[u8]>() {
-                    libsql_core::Value::Blob(value.to_vec())
+                    libsql::Value::Blob(value.to_vec())
                 } else {
                     return Err(PyValueError::new_err("Unsupported parameter type"));
                 };
                 params.push(param);
             }
-            libsql_core::params::Params::Positional(params)
+            libsql::params::Params::Positional(params)
         }
-        None => libsql_core::params::Params::None,
+        None => libsql::params::Params::None,
     };
     let mut stmt = cursor
         .conn
@@ -618,32 +617,33 @@ fn stmt_is_dml(sql: &str) -> bool {
     sql.starts_with("INSERT") || sql.starts_with("UPDATE") || sql.starts_with("DELETE")
 }
 
-fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult<&PyTuple> {
+fn convert_row(py: Python, row: libsql::Row, column_count: i32) -> PyResult<&PyTuple> {
     let mut elements: Vec<Py<PyAny>> = vec![];
     for col_idx in 0..column_count {
         let libsql_value = row.get_value(col_idx).map_err(to_py_err)?;
         let value = match libsql_value {
-            libsql_core::Value::Integer(v) => {
+            libsql::Value::Integer(v) => {
                 let value = v as i64;
                 value.into_py(py)
             }
-            libsql_core::Value::Real(v) => v.into_py(py),
-            libsql_core::Value::Text(v) => v.into_py(py),
-            libsql_core::Value::Blob(v) => {
+            libsql::Value::Real(v) => v.into_py(py),
+            libsql::Value::Text(v) => v.into_py(py),
+            libsql::Value::Blob(v) => {
                 let value = v.as_slice();
                 value.into_py(py)
             }
-            libsql_core::Value::Null => py.None(),
+            libsql::Value::Null => py.None(),
         };
         elements.push(value);
     }
     Ok(PyTuple::new(py, elements))
 }
 
-create_exception!(libsql_experimental, Error, pyo3::exceptions::PyException);
+create_exception!(module, Error, pyo3::exceptions::PyException);
 
 #[pymodule]
-fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
+#[pyo3(name = "libsql")]
+fn module(py: Python, m: &PyModule) -> PyResult<()> {
     let _ = tracing_subscriber::fmt::try_init();
     m.add("LEGACY_TRANSACTION_CONTROL", LEGACY_TRANSACTION_CONTROL)?;
     m.add("paramstyle", "qmark")?;

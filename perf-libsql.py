@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import libsql_experimental
+import libsql
 import pyperf
 import time
 
-con = libsql_experimental.connect(":memory:")
+con = libsql.connect(":memory:")
 cur = con.cursor()
 
 def func():

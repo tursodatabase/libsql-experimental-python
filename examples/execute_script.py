@@ -3,7 +3,7 @@ A short example showing how to execute a script containing a bunch of sql statem
 """
 import os
 
-import libsql_experimental as libsql
+import libsql
 
 def execute_script(conn, file_path: os.PathLike):
     with open(file_path, 'r') as file:

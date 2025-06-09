@@ -21,8 +21,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/libsql-experimental">
-    <img src="https://badge.fury.io/py/libsql-experimental.svg" alt="PyPI" title="PyPI" />
+  <a href="https://pypi.org/project/libsql">
+    <img src="https://badge.fury.io/py/libsql.svg" alt="PyPI" title="PyPI" />
   </a>
   <a href="https://discord.com/invite/4B5D7hYwub">
     <img src="https://dcbadge.vercel.app/api/server/4B5D7hYwub?style=flat" alt="discord activity" title="join us on discord" />

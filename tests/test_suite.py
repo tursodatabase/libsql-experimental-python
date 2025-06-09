@@ -2,7 +2,7 @@
 
 import sqlite3
 import sys
-import libsql_experimental
+import libsql
 import pytest
 
 
@@ -326,18 +326,18 @@ def connect(provider, database, isolation_level="DEFERRED", autocommit=-1):
             raise Exception("libsql-remote server is not running")
         if res.getcode() != 200:
             raise Exception("libsql-remote server is not running")
-        return libsql_experimental.connect(
+        return libsql.connect(
             database, sync_url="http://localhost:8080", auth_token=""
         )
     if provider == "libsql":
         if sys.version_info < (3, 12):
-            return libsql_experimental.connect(
+            return libsql.connect(
                 database, isolation_level=isolation_level
             )
         else:
             if autocommit == -1:
-                autocommit = libsql_experimental.LEGACY_TRANSACTION_CONTROL
-            return libsql_experimental.connect(
+                autocommit = libsql.LEGACY_TRANSACTION_CONTROL
+            return libsql.connect(
                 database, isolation_level=isolation_level, autocommit=autocommit
             )
     if provider == "sqlite":
