@@ -1,11 +1,9 @@
 <p align="center">
   <a href="https://docs.turso.tech/sdk/python/quickstart">
     <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
-    <h3 align="center">Turso + Python (experimental)</h3>
+    <h3 align="center">Turso + Python</h3>
   </a>
 </p>
-
-<i><b>This package is experimental, which means it is not consider to be production grade. Furthermore, the package currently only supports Linux and macOS.</b></i>
 
 <p align="center">
   SQLite for Production. Powered by <a href="https://turso.tech/libsql">libSQL</a>.
