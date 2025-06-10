@@ -868,18 +868,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsql-python"
-version = "0.1.0"
-dependencies = [
- "libsql",
- "pyo3",
- "pyo3-build-config",
- "tokio",
- "tracing-subscriber",
- "version_check",
-]
-
-[[package]]
 name = "libsql-rusqlite"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1235,6 +1223,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.72",
+]
+
+[[package]]
+name = "pylibsql"
+version = "0.1.0"
+dependencies = [
+ "libsql",
+ "pyo3",
+ "pyo3-build-config",
+ "tokio",
+ "tracing-subscriber",
+ "version_check",
 ]
 
 [[package]]

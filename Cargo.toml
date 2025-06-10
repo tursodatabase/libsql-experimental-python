@@ -1,10 +1,9 @@
 [package]
-name = "libsql-python"
+name = "pylibsql"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "libsql_python"
 crate-type = ["cdylib"]
 
 [dependencies]
