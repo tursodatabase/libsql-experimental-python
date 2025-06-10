@@ -643,7 +643,7 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
 create_exception!(libsql, Error, pyo3::exceptions::PyException);
 
 #[pymodule]
-fn libsql(py: Python, m: &PyModule) -> PyResult<()> {
+fn libsql_python(py: Python, m: &PyModule) -> PyResult<()> {
     let _ = tracing_subscriber::fmt::try_init();
     m.add("LEGACY_TRANSACTION_CONTROL", LEGACY_TRANSACTION_CONTROL)?;
     m.add("paramstyle", "qmark")?;
