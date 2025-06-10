@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "libsql-python"
-version = "0.0.55"
+version = "0.1.0"
 dependencies = [
  "libsql",
  "pyo3",
