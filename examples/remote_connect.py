@@ -5,7 +5,7 @@ Set the LIBSQL_URL and LIBSQL_AUTH_TOKEN environment variables to point to a dat
 """
 import os
 
-import libsql_experimental as libsql
+import libsql
 
 print(F"connecting to {os.getenv('LIBSQL_URL')}")
 conn = libsql.connect(database=os.getenv('LIBSQL_URL'),

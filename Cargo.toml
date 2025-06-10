@@ -4,7 +4,7 @@ version = "0.0.55"
 edition = "2021"
 
 [lib]
-name = "libsql_experimental"
+name = "libsql_python"
 crate-type = ["cdylib"]
 
 [dependencies]

@@ -5,7 +5,7 @@ This example demonstrates how to use libSQL with a synced database (local file s
 ## Install Dependencies
 
 ```bash
-pip install libsql-experimental
+pip install libsql
 ```
 
 ## Running

@@ -1,11 +1,9 @@
 <p align="center">
   <a href="https://docs.turso.tech/sdk/python/quickstart">
-    <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-experimental-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
-    <h3 align="center">Turso + Python (experimental)</h3>
+    <img alt="Turso + Python" src="https://github.com/tursodatabase/libsql-python/assets/950181/3748f2b3-872e-4cdd-bbe3-78491fd81dfa" width="1000">
+    <h3 align="center">Turso + Python</h3>
   </a>
 </p>
-
-<i><b>This package is experimental, which means it is not consider to be production grade. Furthermore, the package currently only supports Linux and macOS.</b></i>
 
 <p align="center">
   SQLite for Production. Powered by <a href="https://turso.tech/libsql">libSQL</a>.
@@ -21,8 +19,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/libsql-experimental">
-    <img src="https://badge.fury.io/py/libsql-experimental.svg" alt="PyPI" title="PyPI" />
+  <a href="https://pypi.org/project/libsql">
+    <img src="https://badge.fury.io/py/libsql.svg" alt="PyPI" title="PyPI" />
   </a>
   <a href="https://discord.com/invite/4B5D7hYwub">
     <img src="https://dcbadge.vercel.app/api/server/4B5D7hYwub?style=flat" alt="discord activity" title="join us on discord" />

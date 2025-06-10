@@ -5,7 +5,7 @@ This example demonstrates how to create and use an encrypted SQLite database wit
 ## Install Dependencies
 
 ```bash
-pip install libsql-experimental
+pip install libsql
 ```
 
 ## Running

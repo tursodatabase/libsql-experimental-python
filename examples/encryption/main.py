@@ -1,4 +1,4 @@
-import libsql_experimental as libsql
+import libsql
 
 # You should set the ENCRYPTION_KEY in a environment variable
 # For demo purposes, we're using a fixed key

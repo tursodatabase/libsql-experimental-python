@@ -25,7 +25,7 @@ fn rt() -> Handle {
 
 fn to_py_err(error: libsql_core::errors::Error) -> PyErr {
     let msg = match error {
-        libsql::Error::SqliteFailure(_, err) => err,
+        libsql_core::Error::SqliteFailure(_, err) => err,
         _ => error.to_string(),
     };
     PyValueError::new_err(msg)
@@ -117,21 +117,21 @@ fn _connect_core(
     let rt = rt();
     let encryption_config = match encryption_key {
         Some(key) => {
-            let cipher = libsql::Cipher::default();
-            let encryption_config = libsql::EncryptionConfig::new(cipher, key.into());
+            let cipher = libsql_core::Cipher::default();
+            let encryption_config = libsql_core::EncryptionConfig::new(cipher, key.into());
             Some(encryption_config)
         }
         None => None,
     };
     let db = if is_remote_path(&database) {
-        let result = libsql::Database::open_remote_internal(database.clone(), auth_token, ver);
+        let result = libsql_core::Database::open_remote_internal(database.clone(), auth_token, ver);
         result.map_err(to_py_err)?
     } else {
         match sync_url {
             Some(sync_url) => {
                 let sync_interval = sync_interval.map(|i| std::time::Duration::from_secs_f64(i));
                 let mut builder =
-                    libsql::Builder::new_remote_replica(database, sync_url, auth_token.to_string());
+                    libsql_core::Builder::new_remote_replica(database, sync_url, auth_token.to_string());
                 if let Some(encryption_config) = encryption_config {
                     builder = builder.encryption_config(encryption_config);
                 }
@@ -144,7 +144,7 @@ fn _connect_core(
                 result.map_err(to_py_err)?
             }
             None => {
-                let mut builder = libsql::Builder::new_local(database);
+                let mut builder = libsql_core::Builder::new_local(database);
                 if let Some(config) = encryption_config {
                     builder = builder.encryption_config(config);
                 }
@@ -640,10 +640,10 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
     Ok(PyTuple::new(py, elements))
 }
 
-create_exception!(libsql_experimental, Error, pyo3::exceptions::PyException);
+create_exception!(libsql, Error, pyo3::exceptions::PyException);
 
 #[pymodule]
-fn libsql_experimental(py: Python, m: &PyModule) -> PyResult<()> {
+fn libsql(py: Python, m: &PyModule) -> PyResult<()> {
     let _ = tracing_subscriber::fmt::try_init();
     m.add("LEGACY_TRANSACTION_CONTROL", LEGACY_TRANSACTION_CONTROL)?;
     m.add("paramstyle", "qmark")?;

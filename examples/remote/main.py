@@ -1,4 +1,4 @@
-import libsql_experimental as libsql
+import libsql
 import os
 
 url = os.getenv("TURSO_DATABASE_URL")
