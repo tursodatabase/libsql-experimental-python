@@ -5,6 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use std::cell::{OnceCell, RefCell};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use tokio::runtime::{Handle, Runtime};
 
 const LEGACY_TRANSACTION_CONTROL: i32 = -1;
@@ -37,10 +38,11 @@ fn is_remote_path(path: &str) -> bool {
 
 #[pyfunction]
 #[cfg(not(Py_3_12))]
-#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
+#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
 fn connect(
     py: Python<'_>,
     database: String,
+    timeout: f64,
     isolation_level: Option<String>,
     check_same_thread: bool,
     uri: bool,
@@ -52,6 +54,7 @@ fn connect(
     let conn = _connect_core(
         py,
         database,
+        timeout,
         isolation_level,
         check_same_thread,
         uri,
@@ -65,10 +68,11 @@ fn connect(
 
 #[pyfunction]
 #[cfg(Py_3_12)]
-#[pyo3(signature = (database, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None, autocommit = LEGACY_TRANSACTION_CONTROL))]
+#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None, autocommit = LEGACY_TRANSACTION_CONTROL))]
 fn connect(
     py: Python<'_>,
     database: String,
+    timeout: f64,
     isolation_level: Option<String>,
     check_same_thread: bool,
     uri: bool,
@@ -81,6 +85,7 @@ fn connect(
     let mut conn = _connect_core(
         py,
         database,
+        timeout,
         isolation_level.clone(),
         check_same_thread,
         uri,
@@ -104,6 +109,7 @@ fn connect(
 fn _connect_core(
     py: Python<'_>,
     database: String,
+    timeout: f64,
     isolation_level: Option<String>,
     check_same_thread: bool,
     uri: bool,
@@ -130,8 +136,11 @@ fn _connect_core(
         match sync_url {
             Some(sync_url) => {
                 let sync_interval = sync_interval.map(|i| std::time::Duration::from_secs_f64(i));
-                let mut builder =
-                    libsql_core::Builder::new_remote_replica(database, sync_url, auth_token.to_string());
+                let mut builder = libsql_core::Builder::new_remote_replica(
+                    database,
+                    sync_url,
+                    auth_token.to_string(),
+                );
                 if let Some(encryption_config) = encryption_config {
                     builder = builder.encryption_config(encryption_config);
                 }
@@ -158,6 +167,8 @@ fn _connect_core(
 
     let autocommit = isolation_level.is_none() as i32;
     let conn = db.connect().map_err(to_py_err)?;
+    let timeout = Duration::from_secs_f64(timeout);
+    conn.busy_timeout(timeout).map_err(to_py_err)?;
     Ok(Connection {
         db,
         conn: RefCell::new(Some(Arc::new(ConnectionGuard {

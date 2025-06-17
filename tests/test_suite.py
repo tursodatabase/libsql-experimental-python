@@ -4,7 +4,12 @@ import sqlite3
 import sys
 import libsql
 import pytest
+import tempfile
 
+@pytest.mark.parametrize("provider", ["libsql", "sqlite"])
+def test_connection_timeout(provider):
+    conn = connect(provider, ":memory:", timeout=1.0)
+    conn.close()
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_connection_close(provider):
@@ -163,7 +168,7 @@ def test_commit_and_rollback(provider):
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
 def test_autocommit(provider):
-    conn = connect(provider, ":memory:", None)
+    conn = connect(provider, ":memory:", timeout=4, isolation_level=None)
     assert conn.isolation_level == None
     assert conn.in_transaction == False
     cur = conn.cursor()
@@ -182,7 +187,7 @@ def test_autocommit(provider):
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="requires python3.12 or higher")
 def test_connection_autocommit(provider):
     # Test LEGACY_TRANSACTION_CONTROL (-1)
-    conn = connect(provider, ":memory:", None, autocommit=-1)
+    conn = connect(provider, ":memory:", timeout=5, isolation_level=None, autocommit=-1)
     assert conn.isolation_level is None
     assert conn.autocommit == -1
     cur = conn.cursor()
@@ -193,7 +198,7 @@ def test_connection_autocommit(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
 
-    conn = connect(provider, ":memory:", isolation_level="DEFERRED", autocommit=-1)
+    conn = connect(provider, ":memory:", timeout=5, isolation_level="DEFERRED", autocommit=-1)
     assert conn.isolation_level == "DEFERRED"
     assert conn.autocommit == -1
     cur = conn.cursor()
@@ -205,7 +210,7 @@ def test_connection_autocommit(provider):
     assert (1, "alice@example.com") == res.fetchone()
 
     # Test autocommit Enabled (True)
-    conn = connect(provider, ":memory:", None, autocommit=True)
+    conn = connect(provider, ":memory:", timeout=5, isolation_level=None, autocommit=True)
     assert conn.isolation_level == None
     assert conn.autocommit == True
     cur = conn.cursor()
@@ -216,7 +221,7 @@ def test_connection_autocommit(provider):
     res = cur.execute("SELECT * FROM users")
     assert (1, "bob@example.com") == res.fetchone()
 
-    conn = connect(provider, ":memory:", isolation_level="DEFERRED", autocommit=True)
+    conn = connect(provider, ":memory:", timeout=5, isolation_level="DEFERRED", autocommit=True)
     assert conn.isolation_level == "DEFERRED"
     assert conn.autocommit == True
     cur = conn.cursor()
@@ -228,7 +233,7 @@ def test_connection_autocommit(provider):
     assert (1, "bob@example.com") == res.fetchone()
 
     # Test autocommit Disabled (False)
-    conn = connect(provider, ":memory:", isolation_level="DEFERRED", autocommit=False)
+    conn = connect(provider, ":memory:", timeout=5, isolation_level="DEFERRED", autocommit=False)
     assert conn.isolation_level == "DEFERRED"
     assert conn.autocommit == False
     cur = conn.cursor()
@@ -243,7 +248,7 @@ def test_connection_autocommit(provider):
 
     # Test invalid autocommit value (should raise an error)
     with pytest.raises(ValueError):
-        connect(provider, ":memory:", None, autocommit=999)
+        connect(provider, ":memory:", timeout=5, isolation_level=None, autocommit=999)
 
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
@@ -316,7 +321,7 @@ def test_int64(provider):
     assert [(1, 1099511627776)] == res.fetchall()
 
 
-def connect(provider, database, isolation_level="DEFERRED", autocommit=-1):
+def connect(provider, database, timeout=5, isolation_level="DEFERRED", autocommit=-1):
     if provider == "libsql-remote":
         from urllib import request
 
@@ -332,21 +337,21 @@ def connect(provider, database, isolation_level="DEFERRED", autocommit=-1):
     if provider == "libsql":
         if sys.version_info < (3, 12):
             return libsql.connect(
-                database, isolation_level=isolation_level
+                database, timeout=timeout, isolation_level=isolation_level
             )
         else:
             if autocommit == -1:
                 autocommit = libsql.LEGACY_TRANSACTION_CONTROL
             return libsql.connect(
-                database, isolation_level=isolation_level, autocommit=autocommit
+                database, timeout=timeout, isolation_level=isolation_level, autocommit=autocommit
             )
     if provider == "sqlite":
         if sys.version_info < (3, 12):
-            return sqlite3.connect(database, isolation_level=isolation_level)
+            return sqlite3.connect(database, timeout=timeout, isolation_level=isolation_level)
         else:
             if autocommit == -1:
                 autocommit = sqlite3.LEGACY_TRANSACTION_CONTROL
             return sqlite3.connect(
-                database, isolation_level=isolation_level, autocommit=autocommit
+                database, timeout=timeout, isolation_level=isolation_level, autocommit=autocommit
             )
     raise Exception(f"Provider `{provider}` is not supported")
