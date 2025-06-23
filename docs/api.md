@@ -32,6 +32,16 @@ Rolls back the current transaction and starts a new one.
 
 Closes the database connection.
 
+### `with` statement
+
+Connection objects can be used as context managers to ensure that transactions are properly committed or rolled back. When entering the context, the connection object is returned. When exiting:
+- Without exception: automatically commits the transaction
+- With exception: automatically rolls back the transaction
+
+This behavior is compatible with Python's `sqlite3` module. Context managers work correctly in both transactional and autocommit modes.
+
+When mixing manual transaction control with context managers, the context manager's commit/rollback will apply to any active transaction at the time of exit. Manual calls to `commit()` or `rollback()` within the context are allowed and will start a new transaction as usual.
+
 ### execute(sql, parameters=())
 
 Create a new cursor object and executes the SQL statement.
