@@ -3,7 +3,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::runtime::{Handle, Runtime};
@@ -38,14 +38,14 @@ fn is_remote_path(path: &str) -> bool {
 
 #[pyfunction]
 #[cfg(not(Py_3_12))]
-#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
+#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), _check_same_thread=true, _uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None))]
 fn connect(
     py: Python<'_>,
     database: String,
     timeout: f64,
     isolation_level: Option<String>,
-    check_same_thread: bool,
-    uri: bool,
+    _check_same_thread: bool,
+    _uri: bool,
     sync_url: Option<String>,
     sync_interval: Option<f64>,
     auth_token: &str,
@@ -56,8 +56,8 @@ fn connect(
         database,
         timeout,
         isolation_level,
-        check_same_thread,
-        uri,
+        _check_same_thread,
+        _uri,
         sync_url,
         sync_interval,
         auth_token,
@@ -68,14 +68,14 @@ fn connect(
 
 #[pyfunction]
 #[cfg(Py_3_12)]
-#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), check_same_thread=true, uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None, autocommit = LEGACY_TRANSACTION_CONTROL))]
+#[pyo3(signature = (database, timeout=5.0, isolation_level="DEFERRED".to_string(), _check_same_thread=true, _uri=false, sync_url=None, sync_interval=None, auth_token="", encryption_key=None, autocommit = LEGACY_TRANSACTION_CONTROL))]
 fn connect(
     py: Python<'_>,
     database: String,
     timeout: f64,
     isolation_level: Option<String>,
-    check_same_thread: bool,
-    uri: bool,
+    _check_same_thread: bool,
+    _uri: bool,
     sync_url: Option<String>,
     sync_interval: Option<f64>,
     auth_token: &str,
@@ -87,8 +87,8 @@ fn connect(
         database,
         timeout,
         isolation_level.clone(),
-        check_same_thread,
-        uri,
+        _check_same_thread,
+        _uri,
         sync_url,
         sync_interval,
         auth_token,
@@ -111,8 +111,8 @@ fn _connect_core(
     database: String,
     timeout: f64,
     isolation_level: Option<String>,
-    check_same_thread: bool,
-    uri: bool,
+    _check_same_thread: bool,
+    _uri: bool,
     sync_url: Option<String>,
     sync_interval: Option<f64>,
     auth_token: &str,
@@ -220,7 +220,7 @@ unsafe impl Send for Connection {}
 
 #[pymethods]
 impl Connection {
-    fn close(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<()> {
+    fn close(self_: PyRef<'_, Self>, _py: Python<'_>) -> PyResult<()> {
         self_.conn.replace(None);
         Ok(())
     }
@@ -330,11 +330,14 @@ impl Connection {
     fn in_transaction(self_: PyRef<'_, Self>) -> PyResult<bool> {
         #[cfg(Py_3_12)]
         {
-            return Ok(
+            Ok(
                 !self_.conn.borrow().as_ref().unwrap().is_autocommit() || self_.autocommit == 0
-            );
+            )
         }
-        Ok(!self_.conn.borrow().as_ref().unwrap().is_autocommit())
+        #[cfg(not(Py_3_12))]
+        {
+            Ok(!self_.conn.borrow().as_ref().unwrap().is_autocommit())
+        }
     }
 
     #[getter]
@@ -353,6 +356,26 @@ impl Connection {
         }
         self_.autocommit = autocommit;
         Ok(())
+    }
+
+    fn __enter__(slf: PyRef<'_, Self>) -> PyResult<PyRef<'_, Self>> {
+        Ok(slf)
+    }
+
+    fn __exit__(
+        self_: PyRef<'_, Self>,
+        exc_type: Option<&PyAny>,
+        _exc_val: Option<&PyAny>,
+        _exc_tb: Option<&PyAny>,
+    ) -> PyResult<bool> {
+        if exc_type.is_none() {
+            // Commit on clean exit
+            Connection::commit(self_)?;
+        } else {
+            // Rollback on error
+            Connection::rollback(self_)?;
+        }
+        Ok(false) // Always propagate exceptions
     }
 }
 
