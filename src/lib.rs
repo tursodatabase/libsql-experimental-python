@@ -3,12 +3,22 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::runtime::{Handle, Runtime};
 
 const LEGACY_TRANSACTION_CONTROL: i32 = -1;
+
+enum ListOrTuple<'py> {
+    List(&'py PyList),
+    Tuple(&'py PyTuple),
+}
+
+struct ListOrTupleIterator<'py> {
+    index: usize,
+    inner: &'py ListOrTuple<'py>
+}
 
 fn rt() -> Handle {
     static RT: OnceLock<Runtime> = OnceLock::new();
@@ -286,7 +296,7 @@ impl Connection {
     fn execute(
         self_: PyRef<'_, Self>,
         sql: String,
-        parameters: Option<&PyTuple>,
+        parameters: Option<ListOrTuple>,
     ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
         rt().block_on(async { execute(&cursor, sql, parameters).await })?;
@@ -300,7 +310,7 @@ impl Connection {
     ) -> PyResult<Cursor> {
         let cursor = Connection::cursor(&self_)?;
         for parameters in parameters.unwrap().iter() {
-            let parameters = parameters.extract::<&PyTuple>()?;
+            let parameters = parameters.extract::<ListOrTuple>()?;
             rt().block_on(async { execute(&cursor, sql.clone(), Some(parameters)).await })?;
         }
         Ok(cursor)
@@ -396,7 +406,7 @@ impl Cursor {
     fn execute<'a>(
         self_: PyRef<'a, Self>,
         sql: String,
-        parameters: Option<&PyTuple>,
+        parameters: Option<ListOrTuple>,
     ) -> PyResult<pyo3::PyRef<'a, Self>> {
         rt().block_on(async { execute(&self_, sql, parameters).await })?;
         Ok(self_)
@@ -408,7 +418,7 @@ impl Cursor {
         parameters: Option<&PyList>,
     ) -> PyResult<pyo3::PyRef<'a, Cursor>> {
         for parameters in parameters.unwrap().iter() {
-            let parameters = parameters.extract::<&PyTuple>()?;
+            let parameters = parameters.extract::<ListOrTuple>()?;
             rt().block_on(async { execute(&self_, sql.clone(), Some(parameters)).await })?;
         }
         Ok(self_)
@@ -552,7 +562,11 @@ async fn begin_transaction(conn: &libsql_core::Connection) -> PyResult<()> {
     Ok(())
 }
 
-async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> PyResult<()> {
+async fn execute<'py>(
+    cursor: &Cursor,
+    sql: String,
+    parameters: Option<ListOrTuple<'py>>,
+) -> PyResult<()> {
     if cursor.conn.borrow().as_ref().is_none() {
         return Err(PyValueError::new_err("Connection already closed"));
     }
@@ -576,7 +590,10 @@ async fn execute(cursor: &Cursor, sql: String, parameters: Option<&PyTuple>) -> 
                 } else if let Ok(value) = param.extract::<&[u8]>() {
                     libsql_core::Value::Blob(value.to_vec())
                 } else {
-                    return Err(PyValueError::new_err("Unsupported parameter type"));
+                    return Err(PyValueError::new_err(format!(
+                        "Unsupported parameter type {}",
+                        param.to_string()
+                    )));
                 };
                 params.push(param);
             }
@@ -653,6 +670,44 @@ fn convert_row(py: Python, row: libsql_core::Row, column_count: i32) -> PyResult
 
 create_exception!(libsql, Error, pyo3::exceptions::PyException);
 
+impl<'py> FromPyObject<'py> for ListOrTuple<'py> {
+    fn extract(ob: &'py PyAny) -> PyResult<Self> {
+        if let Ok(list) = ob.downcast::<PyList>() {
+            Ok(ListOrTuple::List(list))
+        } else if let Ok(tuple) = ob.downcast::<PyTuple>() {
+            Ok(ListOrTuple::Tuple(tuple))
+        } else {
+            Err(PyValueError::new_err(
+                "Expected a list or tuple for parameters",
+            ))
+        }
+    }
+}
+
+impl<'py> ListOrTuple<'py> {
+    pub fn iter(&self) -> ListOrTupleIterator {
+        ListOrTupleIterator{
+            index: 0,
+            inner: self,
+        }
+    }
+}
+
+impl<'py> Iterator for ListOrTupleIterator<'py> {
+    type Item = &'py PyAny;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let rv = match self.inner {
+            ListOrTuple::List(list) => list.get_item(self.index),
+            ListOrTuple::Tuple(tuple) => tuple.get_item(self.index),
+        };
+
+        rv.ok().map(|item| {
+            self.index += 1;
+            item
+        })
+    }
+}
 #[pymodule]
 fn libsql(py: Python, m: &PyModule) -> PyResult<()> {
     let _ = tracing_subscriber::fmt::try_init();
