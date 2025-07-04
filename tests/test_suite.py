@@ -23,6 +23,9 @@ def test_execute(provider):
     conn.execute("INSERT INTO users VALUES (1, 'alice@example.com')")
     res = conn.execute("SELECT * FROM users")
     assert (1, "alice@example.com") == res.fetchone()
+    # allow lists for parameters as well
+    res = conn.execute("SELECT * FROM users WHERE id = ?", [1])
+    assert (1, "alice@example.com") == res.fetchone()
 
 
 @pytest.mark.parametrize("provider", ["libsql", "sqlite"])
